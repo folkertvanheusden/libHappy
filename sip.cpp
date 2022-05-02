@@ -10,8 +10,10 @@
 #include <speex/speex.h>
 #include <sys/time.h>
 
+#include "net.h"
 #include "sip.h"
 #include "utils.h"
+
 
 typedef struct {
 	void *state;
@@ -78,23 +80,44 @@ sip::sip(const std::string & upstream_sip_server, const std::string & upstream_s
 	interval(interval),
 	samplerate(samplerate)
 {
-	th = new std::thread(std::ref(*this));
+	th1 = new std::thread(std::ref(*this));  // session cleaner
 
-	th2 = new std::thread(&sip::register_thread, this);
+	th2 = new std::thread(&sip::register_thread, this);  // keep-alive to upstream SIP
+
+	th3 = new std::thread(&sip::sip_listener, this);  // listens for SIP packets
 }
 
 sip::~sip()
 {
 	stop_flag = true;
 
+	th3->join();
+	delete th3;
+
 	th2->join();
 	delete th2;
 
-	th->join();
-	delete th;
+	th1->join();
+	delete th1;
 }
 
-void sip::input(const any_addr & src_ip, int src_port, const any_addr & dst_ip, int dst_port, uint8_t *const payload, const size_t payload_size)
+void sip::sip_listener()
+{
+	int fd = create_datagram_socket(5060);
+
+	for(;;) {
+		char buffer[1600] { 0 };
+
+		sockaddr  addr     { 0 };
+		socklen_t addr_len { sizeof addr };
+
+		ssize_t rc = recvfrom(fd, buffer, sizeof buffer, 0, &addr, &addr_len);
+
+		// TODO invoke sip_input if anything is received on it
+	}
+}
+
+void sip::sip_input(const any_addr & src_ip, int src_port, const any_addr & dst_ip, int dst_port, uint8_t *const payload, const size_t payload_size)
 {
 	DOLOG(info, "SIP: packet from [%s]:%u\n", src_ip.to_str().c_str(), src_port);
 
@@ -298,9 +321,10 @@ codec_t select_schema(const std::vector<std::string> *const body, const int max_
 
 void sip::reply_to_INVITE(const any_addr & src_ip, const int src_port, const any_addr & dst_ip, const int dst_port, const std::vector<std::string> *const headers, const std::vector<std::string> *const body)
 {
+	std::string proto = dst_ip.get_len() == 4 ? "IP4" : "IP6";
+
 	std::vector<std::string> content;
 	content.push_back("v=0");
-	std::string proto = dst_ip.get_len() == 4 ? "IP4" : "IP6";
 	content.push_back("o=jdoe 0 0 IN " + proto + " " + dst_ip.to_str()); // my ip
 	content.push_back("c=IN " + proto + " " + dst_ip.to_str()); // my ip
 	content.push_back("s=MyIP");
@@ -318,15 +342,15 @@ void sip::reply_to_INVITE(const any_addr & src_ip, const int src_port, const any
 			int tgt_rtp_port = m_parts.size() >= 2 ? atoi(m_parts.at(1).c_str()) : 8000;
 
 			sip_session_t *ss = new sip_session_t();
-			ss->start_ts = get_us();
-			ss->headers = *headers;
+			ss->start_ts      = get_us();
+			ss->headers       = *headers;
 			ss->sip_addr_peer = src_ip;
 			ss->sip_port_peer = src_port;
-			ss->sip_addr_me = dst_ip;
-			ss->sip_port_me = dst_port;
-			ss->schema = schema;
-			ss->fd = socket(AF_INET, SOCK_DGRAM, 0);
-			// TODO bind to a port, store port in ss->audio_port
+			ss->sip_addr_me   = dst_ip;
+			ss->sip_port_me   = dst_port;
+			ss->schema        = schema;
+			ss->fd            = create_datagram_socket(0);
+			ss->audio_port    = get_local_port(ss->fd);
 
 			content.push_back("a=sendrecv");
 			content.push_back(myformat("a=rtpmap:%u %s/%u", schema.id, schema.org_name.c_str(), schema.rate));
@@ -564,8 +588,8 @@ void sip::session(const any_addr & tgt_addr, const int tgt_port, const any_addr 
 {
 	set_thread_name("myip-siprtp");
 
-	// TODO: start thread that invokes input_recv for a packet on port ss->fd;
-	// u->add_handler(src_port, std::bind(&sip::input_recv, this, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3, std::placeholders::_4, std::placeholders::_5, std::placeholders::_6), ss);
+	// TODO: start thread that invokes audio_input for a packet on port ss->fd;
+	// u->add_handler(src_port, std::bind(&sip::audio_input, this, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3, std::placeholders::_4, std::placeholders::_5, std::placeholders::_6), ss);
 
 	uint16_t seq_nr = 0;
 	uint32_t t = 0;
@@ -618,7 +642,7 @@ int16_t decode_alaw(int8_t number)
 	return sign == 0 ? decoded:-decoded;
 }
 
-void sip::input_recv(const any_addr & src_ip, int src_port, const any_addr & dst_ip, int dst_port, const uint8_t *const payload, const size_t payload_size, sip_session_t *const ss)
+void sip::audio_input(const any_addr & src_ip, int src_port, const any_addr & dst_ip, int dst_port, const uint8_t *const payload, const size_t payload_size, sip_session_t *const ss)
 {
 	ss->latest_pkt = get_us();
 

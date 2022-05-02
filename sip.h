@@ -44,8 +44,9 @@ private:
 	const int myport, interval;
 	const int samplerate;
 
-	std::thread *th { nullptr };
-	std::thread *th2 { nullptr };  // register thread
+	std::thread *th1 { nullptr };
+	std::thread *th2 { nullptr };
+	std::thread *th3 { nullptr };
 
 	std::map<std::thread *, sip_session_t *> sessions;
 	std::mutex slock;
@@ -66,7 +67,10 @@ private:
 	void reply_to_UNAUTHORIZED(const any_addr & src_ip, const int src_port, const any_addr & dst_ip, const int dst_port, const std::vector<std::string> *const headers);
 	void send_ACK(const any_addr & src_ip, const int src_port, const any_addr & dst_ip, const int dst_port, const std::vector<std::string> *const headers);
 
-	void input_recv(const any_addr & src_ip, int src_port, const any_addr & dst_ip, int dst_port, const uint8_t *const payload, const size_t payload_size, sip_session_t *const ss);
+	void audio_input(const any_addr & src_ip, int src_port, const any_addr & dst_ip, int dst_port, const uint8_t *const payload, const size_t payload_size, sip_session_t *const ss);
+
+	void sip_input(const any_addr & src_ip, int src_port, const any_addr & dst_ip, int dst_port, uint8_t *const payload, const size_t payload_size);
+	void sip_listener();
 
 	void session(const any_addr & tgt_addr, const int tgt_port, const any_addr & src_addr, const int src_port, sip_session_t *const ss);
 
@@ -74,8 +78,6 @@ public:
 	sip(const std::string & upstream_sip_server, const std::string & upstream_sip_user, const std::string & upstream_sip_password, const any_addr & myip, const int myport, const int interval, const int samplerate);
 	sip(const sip &) = delete;
 	virtual ~sip();
-
-	void input(const any_addr & src_ip, int src_port, const any_addr & dst_ip, int dst_port, uint8_t *const payload, const size_t payload_size);
 
 	void operator()();
 };
