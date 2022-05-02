@@ -12,7 +12,7 @@ set(CMAKE_INTERPROCEDURAL_OPTIMIZATION_RELEASE TRUE)
 set(CMAKE_BUILD_TYPE Debug)
 
 add_library(
-  libhappy
+  happy
   any_addr.cpp
   sip.cpp
   utils.cpp
@@ -21,6 +21,6 @@ add_library(
 set(CMAKE_THREAD_PREFER_PTHREAD TRUE)
 set(THREADS_PREFER_PTHREAD_FLAG TRUE)
 find_package(Threads)
-target_link_libraries(libhappy Threads::Threads)
+target_link_libraries(happy Threads::Threads)
 
 include(FindPkgConfig)
