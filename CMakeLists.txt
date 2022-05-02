@@ -13,7 +13,6 @@ set(CMAKE_BUILD_TYPE Debug)
 
 add_library(
   happy
-  any_addr.cpp
   net.cpp
   sip.cpp
   utils.cpp

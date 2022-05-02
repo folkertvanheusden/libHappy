@@ -1,6 +1,8 @@
 // (C) 2021-2022 by folkert van heusden <mail@vanheusden.com>, released under Apache License v2.0
+#include <string>
 #include <unistd.h>
 #include <arpa/inet.h>
+#include <netinet/in.h>
 #include <sys/socket.h>
 
 // TODO: error checking
@@ -33,4 +35,11 @@ int get_local_port(const int fd)
 	getsockname(fd, &a, &a_len);
 
 	return ntohs(reinterpret_cast<const struct sockaddr_in *>(&a)->sin_port);
+}
+
+std::string sockaddr_to_str(const struct sockaddr_in & a)
+{
+	struct sockaddr_in addr = a;  // inet_ntoa doesn't want const
+
+	return inet_ntoa(addr.sin_addr);
 }
