@@ -10,6 +10,10 @@
 #include <vector>
 #include <netinet/in.h>
 
+// not strictly required here but as a convenience for users
+// of this library (only need to include this file)
+#include "utils.h"
+
 
 typedef struct {
 	uint8_t id;
@@ -51,6 +55,8 @@ private:
 	const std::string myip;
 	const int         myport;
 
+	int               sip_fd { -1 };
+
 	const int interval;
 
 	const int samplerate;
@@ -63,6 +69,8 @@ private:
 	std::mutex slock;
 
 	uint64_t ddos_protection { 0 };
+
+	bool transmit_packet(const sockaddr_in *const a, const int fd, const uint8_t *const data, const size_t data_size);
 
 	void reply_to_OPTIONS(const sockaddr_in *const a, const int fd, const std::vector<std::string> *const headers);
 

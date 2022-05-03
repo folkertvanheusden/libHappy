@@ -82,6 +82,8 @@ sip::sip(const std::string & upstream_sip_server, const std::string & upstream_s
 {
 	th1 = new std::thread(std::ref(*this));  // session cleaner
 
+	sip_fd = create_datagram_socket(5060);
+
 	th2 = new std::thread(&sip::register_thread, this);  // keep-alive to upstream SIP
 
 	th3 = new std::thread(&sip::sip_listener, this);  // listens for SIP packets
@@ -103,8 +105,6 @@ sip::~sip()
 
 void sip::sip_listener()
 {
-	int fd = create_datagram_socket(5060);
-
 	for(;!stop_flag;) {
 		char buffer[1600] { 0 };
 
@@ -113,7 +113,7 @@ void sip::sip_listener()
 		sockaddr  addr     { 0 };
 		socklen_t addr_len { sizeof addr };
 
-		ssize_t rc = recvfrom(fd, buffer, sizeof buffer, 0, &addr, &addr_len);
+		ssize_t rc = recvfrom(sip_fd, buffer, sizeof buffer, 0, &addr, &addr_len);
 
 		// TODO invoke sip_input if anything is received on it
 	}
@@ -218,6 +218,11 @@ static void create_response_headers(const std::string & request, std::vector<std
 	target->push_back(myformat("Content-Length: %zu", c_size));
 }
 
+bool sip::transmit_packet(const sockaddr_in *const a, const int fd, const uint8_t *const data, const size_t data_size)
+{
+	return sendto(fd, data, data_size, MSG_CONFIRM, reinterpret_cast<const struct sockaddr *>(a), sizeof *a) == data_size;
+}
+
 void sip::reply_to_OPTIONS(const sockaddr_in *const a, const int fd, const std::vector<std::string> *const headers)
 {
 	std::string proto = a->sin_family == AF_INET ? "IP4" : "IP6";
@@ -226,7 +231,7 @@ void sip::reply_to_OPTIONS(const sockaddr_in *const a, const int fd, const std::
 	content.push_back("v=0");
 	content.push_back("o=jdoe 0 0 IN " + proto + " " + sockaddr_to_str(*a).c_str()); // my ip
 	content.push_back("c=IN " + proto + " " + sockaddr_to_str(*a).c_str()); // my ip
-	content.push_back("s=MyIP");
+	content.push_back("s=Happy");
 	content.push_back("t=0 0");
 	// 1234 could be allocated but as this is send-
 	// only, it is not relevant
@@ -245,7 +250,8 @@ void sip::reply_to_OPTIONS(const sockaddr_in *const a, const int fd, const std::
 
 	std::string out = headers_out + "\r\n" + content_out;
 
-	// TODO u->transmit_packet(src_ip, src_port, dst_ip, dst_port, (const uint8_t *)out.c_str(), out.size());
+	if (transmit_packet(a, fd, (const uint8_t *)out.c_str(), out.size()) == false)
+		DOLOG(info, "sip::reply_to_OPTIONS: transmit failed");
 }
 
 codec_t select_schema(const std::vector<std::string> *const body, const int max_rate)
@@ -327,7 +333,7 @@ void sip::reply_to_INVITE(const sockaddr_in *const a, const int fd, const std::v
 	content.push_back("v=0");
 	content.push_back("o=jdoe 0 0 IN " + proto + " " + myip.c_str());
 	content.push_back("c=IN " + proto + " " + myip.c_str());
-	content.push_back("s=MyIP");
+	content.push_back("s=Happy");
 	content.push_back("t=0 0");
 
 	auto m = find_header(body, "m", "=");
@@ -386,7 +392,8 @@ void sip::send_ACK(const sockaddr_in *const a, const int fd, const std::vector<s
 
 	std::string out = merge(hout, "\r\n");
 
-	// TODO u->transmit_packet(src_ip, src_port, dst_ip, dst_port, (const uint8_t *)out.c_str(), out.size());
+	if (transmit_packet(a, fd, (const uint8_t *)out.c_str(), out.size()) == false)
+		DOLOG(info, "sip::send_ACK: transmit failed");
 }
 
 void sip::reply_to_UNAUTHORIZED(const sockaddr_in *const a, const int fd, const std::vector<std::string> *const headers)
@@ -739,7 +746,7 @@ bool sip::send_REGISTER(const std::string & call_id, const std::string & authori
 	}
 
 	out += "Via: SIP/2.0/UDP " + myip + ":" + myformat("%d", myport) + "\r\n";
-	out += "User-Agent: MyIP\r\n";
+	out += "User-Agent: Happy\r\n";
 	out += "From: <sip:" + username + "@" + tgt_addr + ">;tag=277FD9F0-2607D15D\r\n"; // TODO
 	out += "To: <sip:" + username + "@" + tgt_addr + ">\r\n";
 	out += "Contact: <sip:" + username + "@" + myip + ">;q=1\r\n";
@@ -748,9 +755,12 @@ bool sip::send_REGISTER(const std::string & call_id, const std::string & authori
 	out += "Content-Length: 0\r\n";
 	out += "Max-Forwards: 70\r\n\r\n";
 
-	// TODO return u->transmit_packet(tgt_addr, tgt_port, myip, myport, (const uint8_t *)out.c_str(), out.size());
+	struct sockaddr_in a { 0 };
+        a.sin_family      = PF_INET;
+        a.sin_port        = htons(tgt_port);
+        a.sin_addr.s_addr = inet_addr(tgt_addr.c_str());
 
-	return false;
+	return transmit_packet(&a, sip_fd, (const uint8_t *)out.c_str(), out.size());
 }
 
 // register at upstream server
