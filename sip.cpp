@@ -251,7 +251,7 @@ void sip::reply_to_OPTIONS(const sockaddr_in *const a, const int fd, const std::
 	content.push_back("t=0 0");
 	// 1234 could be allocated but as this is send-
 	// only, it is not relevant
-	content.push_back("m=audio 1234 RTP/AVP 8 11");
+	content.push_back("m=audio 1234 RTP/AVP 8 11 97");
 	content.push_back("a=sendrecv");
 	content.push_back(myformat("a=rtpmap:8 PCMA/%u", samplerate));
 	content.push_back(myformat("a=rtpmap:11 L16/%u", samplerate));
@@ -319,11 +319,12 @@ codec_t select_schema(const std::vector<std::string> *const body, const int max_
 	}
 
 	if (best.id == 255) {
-		DOLOG(info, "SIP: no suitable codec found? picking sane default");
-		best.id = 8;
-		best.name = "pcma";  // safe choice
+		DOLOG(info, "SIP: no suitable codec found? picking sane default\n");
+
+		best.id       = 8;
+		best.name     = "pcma";  // safe choice
 		best.org_name = "PCMA";  // safe choice
-		best.rate = 8000;
+		best.rate     = 8000;
 	}
 
 	if (best.name.substr(0, 5) == "speex") {
@@ -653,7 +654,7 @@ void sip::session(const struct sockaddr_in tgt_addr, const int tgt_rtp_port, sip
 	struct sockaddr_in work_addr = tgt_addr;
 	work_addr.sin_port = htons(tgt_rtp_port);
 
-	DOLOG(info, "sip::session: session handler thread started\n");
+	DOLOG(info, "sip::session: session handler thread started. transmit to %s:%d\n", sockaddr_to_str(work_addr).c_str(), tgt_rtp_port);
 
 	std::thread audio_recv_thread([this, ss]() { wait_for_audio(ss); });
 
@@ -664,7 +665,7 @@ void sip::session(const struct sockaddr_in tgt_addr, const int tgt_rtp_port, sip
 	get_random((uint8_t *)&ssrc, sizeof ssrc);
 
 	for(;!stop_flag && !ss->stop_flag;) {
-		DOLOG(debug, "sip::session: transmit audio\n");
+		// DOLOG(debug, "sip::session: transmit audio\n");
 
 		short *samples = nullptr;
 		size_t n_samples = 0;

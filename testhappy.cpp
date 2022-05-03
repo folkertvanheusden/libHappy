@@ -30,7 +30,9 @@ bool cb_send(short **const samples, size_t *const n_samples, sip_session_t *cons
 	std::unique_lock lck(lock);
 
 	*samples = new short[n];
-	memcpy(*samples, buffer, n * 2);
+
+	for(size_t i=0; i<n; i++)
+		(*samples)[n - i - 1] = buffer[i];
 
 	*n_samples = n;
 
