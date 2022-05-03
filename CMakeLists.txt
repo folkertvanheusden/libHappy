@@ -42,6 +42,11 @@ target_link_libraries(happy ${SPEEX_LIBRARIES})
 target_include_directories(happy PUBLIC ${SPEEX_INCLUDE_DIRS})
 target_compile_options(happy PUBLIC ${SPEEX_CFLAGS_OTHER})
 
+pkg_check_modules(SNDFILE REQUIRED sndfile)
+target_link_libraries(happy ${SNDFILE_LIBRARIES})
+target_include_directories(happy PUBLIC ${SNDFILE_INCLUDE_DIRS})
+target_compile_options(happy PUBLIC ${SNDFILE_CFLAGS_OTHER})
+
 find_package(OpenSSL REQUIRED)
 target_include_directories(happy PUBLIC ${OPENSSL_INCLUDE_DIR})
 target_link_libraries(happy OpenSSL::SSL OpenSSL::Crypto)
