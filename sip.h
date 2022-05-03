@@ -8,6 +8,8 @@
 #include <string>
 #include <thread>
 #include <vector>
+#include <netinet/in.h>
+
 
 typedef struct {
 	uint8_t id;
