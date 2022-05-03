@@ -41,7 +41,7 @@ static void resample(const short *const in, const int in_rate, const int n_sampl
 	sd.src_ratio = ratio;
 
 	int rc = -1;
-	if ((rc = src_simple(&sd, SRC_SINC_BEST_QUALITY, 1)) != 0)
+	if ((rc = src_simple(&sd, SRC_LINEAR, 1)) != 0)
 		DOLOG(warning, "SIP: resample failed: %s", src_strerror(rc));
 
 	*out = new short[*out_n_samples];
@@ -310,7 +310,7 @@ codec_t select_schema(const std::vector<std::string> *const body, const int max_
 				pick = true;
 		}
 
-		if (pick) {
+		if (pick && name.substr(0, 5) != "speex") {
 			best.rate = rate;
 			best.id = id;
 			best.name = name;
@@ -475,7 +475,7 @@ static std::pair<uint8_t *, int> create_rtp_packet(const uint32_t ssrc, const ui
 	uint8_t *rtp_packet = new uint8_t[size * 2](); // *2 for speex (is this required?)
 
 	rtp_packet[0] |= 128;  // v2
-	rtp_packet[1] = schema.id;  // a-law
+	rtp_packet[1] = schema.id;
 	rtp_packet[2] = seq_nr >> 8;
 	rtp_packet[3] = seq_nr;
 	rtp_packet[4] = t >> 24;
@@ -555,35 +555,32 @@ void sip::send_BYE(const sockaddr_in *const a, const int fd, const std::vector<s
 		DOLOG(info, "sip::send_BYTE: transmit failed");
 }
 
-bool sip::transmit_audio(const sockaddr_in tgt_addr, sip_session_t *const ss, const short *const audio, const int n_audio, uint16_t *const seq_nr, uint32_t *const t, const uint32_t ssrc)
+bool sip::transmit_audio(const sockaddr_in tgt_addr, sip_session_t *const ss, const short *const audio_in, const int n_audio_in, uint16_t *const seq_nr, uint32_t *const t, const uint32_t ssrc)
 {
-	int n_work = n_audio, offset = 0;
+	int offset = 0;
 
-	while(n_work > 0 && !stop_flag && !ss->stop_flag) {
-		int cur_n = 0;
-		int cur_n_before = std::min(n_work, ss->schema.frame_size);
+	int    n_audio = 0;
+	short *audio   = nullptr;
+
+	if (samplerate == ss->schema.rate) {
+		n_audio = n_audio_in;
+		audio   = (short *)audio_in;  // FIXME
+	}
+	else {
+		resample(audio_in, samplerate, n_audio_in, &audio, ss->schema.rate, &n_audio);
+	}
+
+	while(n_audio > 0 && !stop_flag && !ss->stop_flag) {
+		int cur_n_before = std::min(n_audio, ss->schema.frame_size);
 		std::pair<uint8_t *, int> rtpp;
 
-		if (samplerate != ss->schema.rate) {
-			short *resampled = nullptr;
-			resample(&audio[offset], samplerate, cur_n_before, &resampled, ss->schema.rate, &cur_n);
-
-			bool odd = cur_n & 1;
-			rtpp = create_rtp_packet(ssrc, *seq_nr, *t, ss->schema, &audio[offset], cur_n + odd);
-
-			delete [] resampled;
-		}
-		else {
-			bool odd = cur_n_before & 1;
-			rtpp = create_rtp_packet(ssrc, *seq_nr, *t, ss->schema, &audio[offset], cur_n_before + odd);
-
-			cur_n = cur_n_before;
-		}
+		bool odd = cur_n_before & 1;
+		rtpp = create_rtp_packet(ssrc, *seq_nr, *t, ss->schema, &audio[offset], cur_n_before + odd);
 
 		offset += cur_n_before;
-		n_work -= cur_n_before;
+		n_audio -= cur_n_before;
 
-		(*t) += cur_n;
+		(*t) += cur_n_before;
 
 		(*seq_nr)++;
 
@@ -597,9 +594,12 @@ bool sip::transmit_audio(const sockaddr_in tgt_addr, sip_session_t *const ss, co
 			delete [] rtpp.first;
 		}
 
-//		double sleep = 1000000.0 / (samplerate / double(cur_n_before));
-//		myusleep(sleep);
+		double sleep = 1000000.0 / (samplerate / double(cur_n_before));
+		myusleep(sleep);
 	}
+
+	if (samplerate != ss->schema.rate)
+		delete [] audio;
 
 	return true;
 }
@@ -643,7 +643,7 @@ void generate_beep(const double f, const double duration, const int samplerate, 
 	double mul = 2.0 * M_PI * f;
 
 	for(size_t i=0; i<*beep_n; i++)
-		(*beep)[i] = 32767 * sin(mul * (i + i / double(*beep_n)));
+		(*beep)[i] = 32767 * sin(mul * (i + i / double(samplerate)));
 }
 
 void sip::session(const struct sockaddr_in tgt_addr, const int tgt_rtp_port, sip_session_t *const ss)
