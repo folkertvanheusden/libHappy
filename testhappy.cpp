@@ -32,7 +32,8 @@ bool cb_send(short **const samples, size_t *const n_samples, sip_session_t *cons
 	*samples = new short[n];
 
 	for(size_t i=0; i<n; i++)
-		(*samples)[n - i - 1] = buffer[i];
+		//(*samples)[n - i - 1] = buffer[i];
+		(*samples)[i] = buffer[i];
 
 	*n_samples = n;
 

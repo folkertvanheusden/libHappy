@@ -628,7 +628,7 @@ void sip::wait_for_audio(sip_session_t *const ss)
 			ssize_t rc = recvfrom(ss->fd, buffer, sizeof buffer, 0, reinterpret_cast<struct sockaddr *>(&addr), &addr_len);
 
 			if (rc > 0) {
-				DOLOG(debug, "sip::wait_for_audio: audio received (%zd bytes)\n", rc);
+				DOLOG(debug, "sip::wait_for_audio: audio received (%zd bytes) from %s:%d\n", rc, sockaddr_to_str(addr).c_str(), ntohs(addr.sin_port));
 
 				audio_input(buffer, rc, ss);
 			}
@@ -742,7 +742,7 @@ void sip::audio_input(const uint8_t *const payload, const size_t payload_size, s
 		}
 	}
 	else if (ss->schema.name == "l16") { // l16 mono
-		int          n_samples = (payload_size - 12) / 2;
+		int n_samples = (payload_size - 12) / 2;
 
 		if (n_samples > 0) {
 			const short *samples = (const short *)&payload[12];
