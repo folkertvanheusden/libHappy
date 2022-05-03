@@ -550,7 +550,7 @@ void sip::transmit_audio(const sockaddr_in tgt_addr, sip_session_t *const ss, co
 {
 	int n_work = n_audio, offset = 0;
 
-	while(n_work > 0 && !stop_flag) {
+	while(n_work > 0 && !stop_flag && !ss->stop_flag) {
 		int cur_n = 0;
 		int cur_n_before = std::min(n_work, ss->schema.frame_size);
 		std::pair<uint8_t *, int> rtpp;
@@ -590,22 +590,60 @@ void sip::transmit_audio(const sockaddr_in tgt_addr, sip_session_t *const ss, co
 	}
 }
 
+void sip::wait_for_audio(sip_session_t *const ss)
+{
+	DOLOG(info, "sip::wait_for_audio: audio receive handler thread started\n");
+
+	// wait for packets on ss->fd
+	// send them to audio_input()
+	struct pollfd fds[] { { ss->fd, POLLIN, 0 } };
+
+	for(;!stop_flag && !ss->stop_flag;) {
+		uint8_t buffer[1600] { 0 };
+
+		int rc = poll(fds, 1, 500);
+
+		if (rc == -1)
+			break;
+
+		if (rc == 1) {
+			sockaddr_in addr     { 0 };
+			socklen_t   addr_len { sizeof addr };
+
+			ssize_t rc = recvfrom(ss->fd, buffer, sizeof buffer, 0, reinterpret_cast<struct sockaddr *>(&addr), &addr_len);
+
+			if (rc > 0) {
+				DOLOG(debug, "sip::wait_for_audio: audio received\n");
+
+				audio_input(buffer, sizeof buffer, ss);
+			}
+		}
+	}
+}
+
 void sip::session(const sockaddr_in tgt_addr, sip_session_t *const ss)
 {
-	set_thread_name("myip-siprtp");
+	set_thread_name("SIP-RTP");
 
-	// TODO: start thread that invokes audio_input for a packet on port ss->fd;
-	// u->add_handler(src_port, std::bind(&sip::audio_input, this, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3, std::placeholders::_4, std::placeholders::_5, std::placeholders::_6), ss);
+	DOLOG(info, "sip::session: session handler thread started\n");
+
+	std::thread audio_recv_thread([this, ss]() { wait_for_audio(ss); });
 
 	uint16_t seq_nr = 0;
-	uint32_t t = 0;
+	uint32_t t      = 0;
 
-	uint32_t ssrc;
+	uint32_t ssrc   = 0;
 	get_random((uint8_t *)&ssrc, sizeof ssrc);
 
-	for(;;) {
+	for(;!stop_flag && !ss->stop_flag;) {
+		DOLOG(debug, "sip::session: transmit audio\n");
+
 		short *samples = nullptr;
 		size_t n_samples = 0;
+
+		n_samples = 4096;
+		samples = new short[n_samples];
+		get_random((uint8_t *)samples, n_samples * 2);
 
 		// TODO callback
 		// if callback returns false:
@@ -616,11 +654,15 @@ void sip::session(const sockaddr_in tgt_addr, sip_session_t *const ss)
 		delete [] samples;
 	}
 
+	ss->stop_flag = true;
+
 	send_BYE(&tgt_addr, ss->fd, ss->headers);
 
 	send_REGISTER("", "");  // required?
 
-	ss->finished = true;
+	ss->finished  = true;
+
+	DOLOG(info, "sip::session: session handler thread terminated\n");
 }
 
 // from
@@ -650,7 +692,7 @@ static int16_t decode_alaw(int8_t number)
 	return sign == 0 ? decoded:-decoded;
 }
 
-void sip::audio_input(const sockaddr_in & tgt_addr, const uint8_t *const payload, const size_t payload_size, sip_session_t *const ss)
+void sip::audio_input(const uint8_t *const payload, const size_t payload_size, sip_session_t *const ss)
 {
 	ss->latest_pkt = get_us();
 
