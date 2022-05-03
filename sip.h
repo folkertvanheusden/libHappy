@@ -93,7 +93,7 @@ private:
 	void sip_input(const sockaddr_in *const a, const int fd, uint8_t *const payload, const size_t payload_size);
 	void sip_listener();
 
-	void session(const sockaddr_in tgt_addr, sip_session_t *const ss);
+	void session(const struct sockaddr_in tgt_addr, const int tgt_rtp_port, sip_session_t *const ss);
 
 	void session_cleaner();
 

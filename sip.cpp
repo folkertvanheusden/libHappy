@@ -386,7 +386,7 @@ void sip::reply_to_INVITE(const sockaddr_in *const a, const int fd, const std::v
 			if (transmit_packet(a, fd, (const uint8_t *)out.c_str(), out.size()) == false)
 				DOLOG(info, "sip::reply_to_INVITE: transmit failed");
 
-			std::thread *th = new std::thread(&sip::session, this, *a, ss);
+			std::thread *th = new std::thread(&sip::session, this, *a, tgt_rtp_port, ss);
 
 			slock.lock();
 			sessions.insert({ th, ss });
@@ -613,17 +613,31 @@ void sip::wait_for_audio(sip_session_t *const ss)
 			ssize_t rc = recvfrom(ss->fd, buffer, sizeof buffer, 0, reinterpret_cast<struct sockaddr *>(&addr), &addr_len);
 
 			if (rc > 0) {
-				DOLOG(debug, "sip::wait_for_audio: audio received\n");
+				DOLOG(debug, "sip::wait_for_audio: audio received (%zd bytes)\n", rc);
 
-				audio_input(buffer, sizeof buffer, ss);
+				audio_input(buffer, rc, ss);
 			}
 		}
 	}
 }
 
-void sip::session(const sockaddr_in tgt_addr, sip_session_t *const ss)
+void generate_beep(const double f, const double duration, const int samplerate, short **const beep, size_t *const beep_n)
+{
+	*beep_n = samplerate * duration;
+	*beep = new short[*beep_n];
+
+	double mul = 2.0 * M_PI * f;
+
+	for(size_t i=0; i<*beep_n; i++)
+		(*beep)[i] = 32767 * sin(mul * (i + i / double(*beep_n)));
+}
+
+void sip::session(const struct sockaddr_in tgt_addr, const int tgt_rtp_port, sip_session_t *const ss)
 {
 	set_thread_name("SIP-RTP");
+
+	struct sockaddr_in work_addr = tgt_addr;
+	work_addr.sin_port = htons(tgt_rtp_port);
 
 	DOLOG(info, "sip::session: session handler thread started\n");
 
@@ -641,15 +655,13 @@ void sip::session(const sockaddr_in tgt_addr, sip_session_t *const ss)
 		short *samples = nullptr;
 		size_t n_samples = 0;
 
-		n_samples = 4096;
-		samples = new short[n_samples];
-		get_random((uint8_t *)samples, n_samples * 2);
+		generate_beep(1000, 0.1, samplerate, &samples, &n_samples);
 
 		// TODO callback
 		// if callback returns false:
 		// break
 
-		transmit_audio(tgt_addr, ss, samples, n_samples, &seq_nr, &t, ssrc);
+		transmit_audio(work_addr, ss, samples, n_samples, &seq_nr, &t, ssrc);
 
 		delete [] samples;
 	}
