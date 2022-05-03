@@ -368,7 +368,6 @@ void sip::reply_to_INVITE(const sockaddr_in *const a, const int fd, const std::v
 			ss->start_ts       = get_us();
 			ss->headers        = *headers;
 			memcpy(&ss->sip_addr_peer, a, sizeof ss->sip_addr_peer);
-			ss->sip_port_peer  = 5060;
 			ss->schema         = schema;
 			ss->fd             = create_datagram_socket(0);
 			ss->audio_port     = get_local_port(ss->fd);
@@ -598,8 +597,8 @@ bool sip::transmit_audio(const sockaddr_in tgt_addr, sip_session_t *const ss, co
 			delete [] rtpp.first;
 		}
 
-		double sleep = 1000000.0 / (samplerate / double(cur_n_before));
-		myusleep(sleep);
+//		double sleep = 1000000.0 / (samplerate / double(cur_n_before));
+//		myusleep(sleep);
 	}
 
 	return true;
@@ -665,8 +664,6 @@ void sip::session(const struct sockaddr_in tgt_addr, const int tgt_rtp_port, sip
 	get_random((uint8_t *)&ssrc, sizeof ssrc);
 
 	for(;!stop_flag && !ss->stop_flag;) {
-		// DOLOG(debug, "sip::session: transmit audio\n");
-
 		short *samples = nullptr;
 		size_t n_samples = 0;
 
@@ -736,7 +733,14 @@ void sip::audio_input(const uint8_t *const payload, const size_t payload_size, s
 			for(int i=0; i<n_samples; i++)
 				temp[i] = decode_alaw(payload[12 + i]);
 
-			recv_callback(temp, n_samples, ss);
+			short *result   = nullptr;
+			int    result_n = 0;
+			resample(temp, ss->schema.rate, n_samples, &result, samplerate, &result_n);
+			printf("%d -> %d | %d/%d\n", n_samples, result_n, ss->schema.rate, samplerate);
+
+			recv_callback(result, result_n, ss);
+
+			delete [] result;
 
 			delete [] temp;
 		}
@@ -747,7 +751,13 @@ void sip::audio_input(const uint8_t *const payload, const size_t payload_size, s
 		if (n_samples > 0) {
 			const short *samples = (const short *)&payload[12];
 
-			recv_callback(samples, n_samples, ss);
+			short *result   = nullptr;
+			int    result_n = 0;
+			resample(samples, ss->schema.rate, n_samples, &result, samplerate, &result_n);
+
+			recv_callback(result, result_n, ss);
+
+			delete [] result;
 		}
 	}
 	else if (ss->schema.name.substr(0, 5) == "speex") { // speex
@@ -763,7 +773,13 @@ void sip::audio_input(const uint8_t *const payload, const size_t payload_size, s
 		short *of = new short[frame_size];
 		speex_decode_int(spx.state, &spx.bits, of);
 
-		recv_callback(of, frame_size, ss);
+		short *result   = nullptr;
+		int    result_n = 0;
+		resample(of, ss->schema.rate, frame_size, &result, samplerate, &result_n);
+
+		recv_callback(result, result_n, ss);
+
+		delete [] result;
 
 		delete [] of;
 

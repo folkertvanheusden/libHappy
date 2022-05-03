@@ -32,7 +32,6 @@ typedef struct _sip_session_ {
 	std::vector<std::string> headers;
 
 	struct sockaddr_in sip_addr_peer { 0 };
-	int                sip_port_peer { 0 };
 
 	codec_t            schema        { 255, "", "", -1 };
 
@@ -125,3 +124,5 @@ public:
 
 	virtual ~sip();
 };
+
+void generate_beep(const double f, const double duration, const int samplerate, short **const beep, size_t *const beep_n);

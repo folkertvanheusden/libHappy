@@ -1,13 +1,7 @@
-#include <mutex>
-#include <string.h>
 #include <unistd.h>
 
 #include "sip.h"
 
-
-std::mutex lock;
-short buffer[4096];
-size_t n = 0;
 
 bool cb_new_session(sip_session_t *const session)
 {
@@ -16,26 +10,20 @@ bool cb_new_session(sip_session_t *const session)
 
 bool cb_recv(const short *const samples, const size_t n_samples, sip_session_t *const session)
 {
-	std::unique_lock lck(lock);
+	printf("%zu\n", n_samples);
+	FILE *fh = fopen("test.smp", "a+");
+	if (fh) {
+		fwrite(samples, sizeof(short), n_samples, fh);
 
-	memcpy(buffer, samples, n_samples * 2);
-
-	n = n_samples;
+		fclose(fh);
+	}
 
 	return true;
 }
 
 bool cb_send(short **const samples, size_t *const n_samples, sip_session_t *const session)
 {
-	std::unique_lock lck(lock);
-
-	*samples = new short[n];
-
-	for(size_t i=0; i<n; i++)
-		//(*samples)[n - i - 1] = buffer[i];
-		(*samples)[i] = buffer[i];
-
-	*n_samples = n;
+	generate_beep(440, 0.1, 44100, samples, n_samples);
 
 	return true;
 }
