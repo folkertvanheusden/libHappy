@@ -1,6 +1,13 @@
+#include <mutex>
+#include <string.h>
 #include <unistd.h>
 
 #include "sip.h"
+
+
+std::mutex lock;
+short buffer[4096];
+size_t n = 0;
 
 bool cb_new_session(sip_session_t *const session)
 {
@@ -9,11 +16,24 @@ bool cb_new_session(sip_session_t *const session)
 
 bool cb_recv(const short *const samples, const size_t n_samples, sip_session_t *const session)
 {
+	std::unique_lock lck(lock);
+
+	memcpy(buffer, samples, n_samples * 2);
+
+	n = n_samples;
+
 	return true;
 }
 
 bool cb_send(short **const samples, size_t *const n_samples, sip_session_t *const session)
 {
+	std::unique_lock lck(lock);
+
+	*samples = new short[n];
+	memcpy(*samples, buffer, n * 2);
+
+	*n_samples = n;
+
 	return true;
 }
 

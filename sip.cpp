@@ -393,6 +393,8 @@ void sip::reply_to_INVITE(const sockaddr_in *const a, const int fd, const std::v
 			if (transmit_packet(a, fd, (const uint8_t *)out.c_str(), out.size()) == false)
 				DOLOG(info, "sip::reply_to_INVITE: transmit failed");
 
+			new_session_callback(ss);
+
 			std::thread *th = new std::thread(&sip::session, this, *a, tgt_rtp_port, ss);
 
 			slock.lock();
