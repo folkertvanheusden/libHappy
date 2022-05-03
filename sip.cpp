@@ -669,8 +669,6 @@ void sip::session(const struct sockaddr_in tgt_addr, const int tgt_rtp_port, sip
 		short *samples = nullptr;
 		size_t n_samples = 0;
 
-		generate_beep(1000, 0.1, samplerate, &samples, &n_samples);
-
 		if (send_callback(&samples, &n_samples, ss) == false) {
 			DOLOG(debug, "sip::session: callback indicated end\n");
 
