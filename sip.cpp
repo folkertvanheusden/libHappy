@@ -106,16 +106,17 @@ sip::~sip()
 void sip::sip_listener()
 {
 	for(;!stop_flag;) {
-		char buffer[1600] { 0 };
+		uint8_t buffer[1600] { 0 };
 
 		// TODO poll(500ms) to check stop_flag occasionally
 
-		sockaddr  addr     { 0 };
-		socklen_t addr_len { sizeof addr };
+		sockaddr_in addr     { 0 };
+		socklen_t   addr_len { sizeof addr };
 
-		ssize_t rc = recvfrom(sip_fd, buffer, sizeof buffer, 0, &addr, &addr_len);
+		ssize_t rc = recvfrom(sip_fd, buffer, sizeof buffer, 0, reinterpret_cast<struct sockaddr *>(&addr), &addr_len);
 
-		// TODO invoke sip_input if anything is received on it
+		if (rc > 0)
+			sip_input(&addr, sip_fd, buffer, rc);
 	}
 }
 
@@ -374,7 +375,8 @@ void sip::reply_to_INVITE(const sockaddr_in *const a, const int fd, const std::v
 			std::string out = headers_out + "\r\n" + content_out;
 
 			// send INVITE reply
-			// TODO u->transmit_packet(src_ip, src_port, dst_ip, dst_port, (const uint8_t *)out.c_str(), out.size());
+			if (transmit_packet(a, fd, (const uint8_t *)out.c_str(), out.size()) == false)
+				DOLOG(info, "sip::reply_to_INVITE: transmit failed");
 
 			std::thread *th = new std::thread(&sip::session, this, *a, ss);
 
@@ -532,7 +534,8 @@ void sip::send_BYE(const sockaddr_in *const a, const int fd, const std::vector<s
 
 	std::string out = merge(hout, "\r\n") + "\r\n";
 
-	// TODO u->transmit_packet(tgt_addr, tgt_port, src_addr, src_port, (const uint8_t *)out.c_str(), out.size());
+	if (transmit_packet(a, fd, (const uint8_t *)out.c_str(), out.size()) == false)
+		DOLOG(info, "sip::send_BYTE: transmit failed");
 }
 
 void sip::transmit_audio(const sockaddr_in tgt_addr, sip_session_t *const ss, const short *const audio, const int n_audio, uint16_t *const seq_nr, uint32_t *const t, const uint32_t ssrc)
@@ -568,7 +571,8 @@ void sip::transmit_audio(const sockaddr_in tgt_addr, sip_session_t *const ss, co
 		(*seq_nr)++;
 
 		if (rtpp.second) {
-			// TODO u->transmit_packet(tgt_addr, tgt_port, src_addr, src_port, rtpp.first, rtpp.second);
+			if (transmit_packet(&tgt_addr, ss->fd, rtpp.first, rtpp.second) == false)
+				DOLOG(info, "sip::send_BYTE: transmit failed");
 
 			delete [] rtpp.first;
 		}
