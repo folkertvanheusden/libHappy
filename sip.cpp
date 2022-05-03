@@ -297,7 +297,7 @@ codec_t select_schema(const std::vector<std::string> *const body, const int max_
 
 		bool pick = false;
 
-		if (rate >= max_rate && (name == "l16" || name.substr(0, 5) == "speex" || name == "alaw" || name == "pcma")) {
+		if (rate >= best.rate && (name == "l16" || name.substr(0, 5) == "speex" || name == "alaw" || name == "pcma")) {
 			if (abs(rate - max_rate) < abs(rate - best.rate) || best.rate == -1)
 				pick = true;
 		}
