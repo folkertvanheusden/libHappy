@@ -2,6 +2,7 @@
 #include <cstring>
 #include <math.h>
 #include <optional>
+#include <poll.h>
 #include <samplerate.h>
 #include <sndfile.h>
 #include <stdint.h>
@@ -80,7 +81,7 @@ sip::sip(const std::string & upstream_sip_server, const std::string & upstream_s
 	interval(interval),
 	samplerate(samplerate)
 {
-	th1 = new std::thread(std::ref(*this));  // session cleaner
+	th1 = new std::thread(&sip::session_cleaner, this);  // session cleaner
 
 	sip_fd = create_datagram_socket(5060);
 
@@ -105,18 +106,25 @@ sip::~sip()
 
 void sip::sip_listener()
 {
+	struct pollfd fds[] { { sip_fd, POLLIN, 0 } };
+
 	for(;!stop_flag;) {
 		uint8_t buffer[1600] { 0 };
 
-		// TODO poll(500ms) to check stop_flag occasionally
+		int rc = poll(fds, 1, 500);
 
-		sockaddr_in addr     { 0 };
-		socklen_t   addr_len { sizeof addr };
+		if (rc == -1)
+			break;
 
-		ssize_t rc = recvfrom(sip_fd, buffer, sizeof buffer, 0, reinterpret_cast<struct sockaddr *>(&addr), &addr_len);
+		if (rc == 1) {
+			sockaddr_in addr     { 0 };
+			socklen_t   addr_len { sizeof addr };
 
-		if (rc > 0)
-			sip_input(&addr, sip_fd, buffer, rc);
+			ssize_t rc = recvfrom(sip_fd, buffer, sizeof buffer, 0, reinterpret_cast<struct sockaddr *>(&addr), &addr_len);
+
+			if (rc > 0)
+				sip_input(&addr, sip_fd, buffer, rc);
+		}
 	}
 }
 
@@ -692,7 +700,7 @@ void sip::audio_input(const sockaddr_in & tgt_addr, const uint8_t *const payload
 	}
 }
 
-void sip::operator()()
+void sip::session_cleaner()
 {
 	set_thread_name("session-cleaner");
 

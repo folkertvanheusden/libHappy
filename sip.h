@@ -25,6 +25,7 @@ typedef struct {
 typedef struct _sip_session_ {
 	uint64_t           start_ts      { 0 };
 
+	std::atomic_bool   stop_flag     { false };
 	std::atomic_bool   finished      { false };
 
 	std::vector<std::string> headers;
@@ -93,10 +94,10 @@ private:
 
 	void session(const sockaddr_in tgt_addr, sip_session_t *const ss);
 
+	void session_cleaner();
+
 public:
 	sip(const std::string & upstream_sip_server, const std::string & upstream_sip_user, const std::string & upstream_sip_password, const std::string & myip, const int myport, const int interval, const int samplerate);
 	sip(const sip &) = delete;
 	virtual ~sip();
-
-	void operator()();
 };
