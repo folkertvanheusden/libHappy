@@ -1,6 +1,7 @@
 // (C) 2020-2022 by folkert van heusden <mail@vanheusden.com>, released under Apache License v2.0
 #pragma once
 #include <atomic>
+#include <functional>
 #include <map>
 #include <mutex>
 #include <sndfile.h>
@@ -40,6 +41,8 @@ typedef struct _sip_session_ {
 	int                audio_port   { 0 };
 	int                fd           { -1 };
 
+	void              *private_data { nullptr };
+
 	_sip_session_() {
 	}
 } sip_session_t;
@@ -47,7 +50,7 @@ typedef struct _sip_session_ {
 class sip
 {
 private:
-	std::atomic_bool stop_flag { false };
+	std::atomic_bool  stop_flag { false };
 
 	const std::string upstream_server;
 	const std::string username;
@@ -61,6 +64,18 @@ private:
 	const int interval;
 
 	const int samplerate;
+
+	// called when a new session is started, one can set 'private_data'
+	std::function<bool(sip_session_t *const session)> new_session_callback;
+
+	// called when we receive audio from peer
+	std::function<bool(const short *const samples, const size_t n_samples, sip_session_t *const session)> recv_callback;
+
+	// called to get audio that will be transmitted to peer
+	std::function<bool(short **const samples, size_t *const n_samples, sip_session_t *const session)> send_callback;
+
+	// called when a new session finishes, need to free any 'private_data'
+	std::function<void(sip_session_t *const session)> end_session_callback;
 
 	std::thread *th1 { nullptr };
 	std::thread *th2 { nullptr };
@@ -79,7 +94,7 @@ private:
 
 	void send_BYE(const sockaddr_in *const a, const int fd, const std::vector<std::string> & headers);
 
-	void transmit_audio(const sockaddr_in tgt_addr, sip_session_t *const ss, const short *const samples, const int n_samples, uint16_t *const seq_nr, uint32_t *const t, const uint32_t ssrc);
+	bool transmit_audio(const sockaddr_in tgt_addr, sip_session_t *const ss, const short *const samples, const int n_samples, uint16_t *const seq_nr, uint32_t *const t, const uint32_t ssrc);
 
 	bool send_REGISTER(const std::string & call_id, const std::string & authorize);
 	void register_thread();
@@ -97,8 +112,16 @@ private:
 
 	void session_cleaner();
 
-public:
-	sip(const std::string & upstream_sip_server, const std::string & upstream_sip_user, const std::string & upstream_sip_password, const std::string & myip, const int myport, const int interval, const int samplerate);
 	sip(const sip &) = delete;
+
+public:
+	sip(const std::string & upstream_sip_server, const std::string & upstream_sip_user, const std::string & upstream_sip_password,
+		const std::string & myip, const int myport,
+		const int sip_register_interval, const int samplerate,
+		std::function<bool(sip_session_t *const session)> new_session_callback,
+		std::function<bool(const short *const samples, const size_t n_samples, sip_session_t *const session)> recv_callback,
+		std::function<bool(short **const samples, size_t *const n_samples, sip_session_t *const session)> send_callback,
+		std::function<void(sip_session_t *const session)> end_session_callback);
+
 	virtual ~sip();
 };

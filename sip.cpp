@@ -75,11 +75,18 @@ static int8_t encode_alaw(int16_t number)
 	return (sign | ((position - 4) << 4) | lsb) ^ 0x55;
 }
 
-sip::sip(const std::string & upstream_sip_server, const std::string & upstream_sip_user, const std::string & upstream_sip_password, const std::string & myip, const int myport, const int interval, const int samplerate) :
+sip::sip(const std::string & upstream_sip_server, const std::string & upstream_sip_user, const std::string & upstream_sip_password,
+		const std::string & myip, const int myport,
+		const int sip_register_interval, const int samplerate,
+		std::function<bool(sip_session_t *const session)> new_session_callback,
+		std::function<bool(const short *const samples, const size_t n_samples, sip_session_t *const session)> recv_callback,
+		std::function<bool(short **const samples, size_t *const n_samples, sip_session_t *const session)> send_callback,
+		std::function<void(sip_session_t *const session)> end_session_callback) :
 	upstream_server(upstream_sip_server), username(upstream_sip_user), password(upstream_sip_password),
 	myip(myip), myport(myport),
-	interval(interval),
-	samplerate(samplerate)
+	interval(sip_register_interval),
+	samplerate(samplerate),
+	new_session_callback(new_session_callback), recv_callback(recv_callback), send_callback(send_callback), end_session_callback(end_session_callback)
 {
 	th1 = new std::thread(&sip::session_cleaner, this);  // session cleaner
 
@@ -229,7 +236,7 @@ static void create_response_headers(const std::string & request, std::vector<std
 
 bool sip::transmit_packet(const sockaddr_in *const a, const int fd, const uint8_t *const data, const size_t data_size)
 {
-	return sendto(fd, data, data_size, MSG_CONFIRM, reinterpret_cast<const struct sockaddr *>(a), sizeof *a) == data_size;
+	return sendto(fd, data, data_size, MSG_CONFIRM, reinterpret_cast<const struct sockaddr *>(a), sizeof *a) == ssize_t(data_size);
 }
 
 void sip::reply_to_OPTIONS(const sockaddr_in *const a, const int fd, const std::vector<std::string> *const headers)
@@ -546,7 +553,7 @@ void sip::send_BYE(const sockaddr_in *const a, const int fd, const std::vector<s
 		DOLOG(info, "sip::send_BYTE: transmit failed");
 }
 
-void sip::transmit_audio(const sockaddr_in tgt_addr, sip_session_t *const ss, const short *const audio, const int n_audio, uint16_t *const seq_nr, uint32_t *const t, const uint32_t ssrc)
+bool sip::transmit_audio(const sockaddr_in tgt_addr, sip_session_t *const ss, const short *const audio, const int n_audio, uint16_t *const seq_nr, uint32_t *const t, const uint32_t ssrc)
 {
 	int n_work = n_audio, offset = 0;
 
@@ -579,8 +586,11 @@ void sip::transmit_audio(const sockaddr_in tgt_addr, sip_session_t *const ss, co
 		(*seq_nr)++;
 
 		if (rtpp.second) {
-			if (transmit_packet(&tgt_addr, ss->fd, rtpp.first, rtpp.second) == false)
+			if (transmit_packet(&tgt_addr, ss->fd, rtpp.first, rtpp.second) == false) {
 				DOLOG(info, "sip::send_BYTE: transmit failed");
+
+				return false;
+			}
 
 			delete [] rtpp.first;
 		}
@@ -588,6 +598,8 @@ void sip::transmit_audio(const sockaddr_in tgt_addr, sip_session_t *const ss, co
 		double sleep = 1000000.0 / (samplerate / double(cur_n_before));
 		myusleep(sleep);
 	}
+
+	return true;
 }
 
 void sip::wait_for_audio(sip_session_t *const ss)
@@ -657,11 +669,17 @@ void sip::session(const struct sockaddr_in tgt_addr, const int tgt_rtp_port, sip
 
 		generate_beep(1000, 0.1, samplerate, &samples, &n_samples);
 
-		// TODO callback
-		// if callback returns false:
-		// break
+		if (send_callback(&samples, &n_samples, ss) == false) {
+			DOLOG(debug, "sip::session: callback indicated end\n");
 
-		transmit_audio(work_addr, ss, samples, n_samples, &seq_nr, &t, ssrc);
+			break;
+		}
+
+		if (transmit_audio(work_addr, ss, samples, n_samples, &seq_nr, &t, ssrc) == false) {
+			DOLOG(debug, "sip::session: transmit audio failed\n");
+
+			break;
+		}
 
 		delete [] samples;
 	}
@@ -717,16 +735,18 @@ void sip::audio_input(const uint8_t *const payload, const size_t payload_size, s
 			for(int i=0; i<n_samples; i++)
 				temp[i] = decode_alaw(payload[12 + i]);
 
-			// TODO send to callback
+			recv_callback(temp, n_samples, ss);
 
 			delete [] temp;
 		}
 	}
 	else if (ss->schema.name == "l16") { // l16 mono
-		int n_samples = (payload_size - 12) / 2;
+		int          n_samples = (payload_size - 12) / 2;
 
 		if (n_samples > 0) {
-			// TODO send to callback
+			const short *samples = (const short *)&payload[12];
+
+			recv_callback(samples, n_samples, ss);
 		}
 	}
 	else if (ss->schema.name.substr(0, 5) == "speex") { // speex
@@ -742,7 +762,7 @@ void sip::audio_input(const uint8_t *const payload, const size_t payload_size, s
 		short *of = new short[frame_size];
 		speex_decode_int(spx.state, &spx.bits, of);
 
-		// TODO send to callback
+		recv_callback(of, frame_size, ss);
 
 		delete [] of;
 
