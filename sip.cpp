@@ -44,8 +44,6 @@ static void resample(SRC_STATE *const state, const short *const in, const int in
 	if ((rc = src_process(state, &sd)) != 0)
 		DOLOG(warning, "SIP: resample failed: %s", src_strerror(rc));
 
-	printf("%ld %ld\n", sd.input_frames_used, sd.output_frames_gen);
-
 	*out_n_samples = sd.output_frames_gen;
 
 	*out = new short[*out_n_samples];
@@ -163,7 +161,7 @@ void sip::sip_input(const sockaddr_in *const a, const int fd, uint8_t *const pay
 		reply_to_INVITE(a, fd, &header_lines, &body_lines);
 	}
 	else if (parts.size() == 3 && parts.at(0) == "BYE" && parts.at(2) == "SIP/2.0") {
-		send_ACK(a, fd, &header_lines);
+		reply_to_BYE(a, fd, &header_lines);
 	}
 	else if (parts.size() >= 2 && parts.at(0) == "SIP/2.0" && parts.at(1) == "401") {
 		if (now - ddos_protection > 1000000) {
@@ -314,7 +312,7 @@ codec_t select_schema(const std::vector<std::string> *const body, const int max_
 				pick = true;
 		}
 
-		if (pick && name.substr(0, 5) != "speex") {
+		if (pick) {
 			best.rate = rate;
 			best.id = id;
 			best.name = name;
@@ -366,7 +364,11 @@ void sip::reply_to_INVITE(const sockaddr_in *const a, const int fd, const std::v
 
 		if (schema.id != 255) {
 			// find port to transmit rtp data to and start send-thread
-			int tgt_rtp_port = m_parts.size() >= 2 ? atoi(m_parts.at(1).c_str()) : 8000;
+			int  tgt_rtp_port  = m_parts.size() >= 2 ? atoi(m_parts.at(1).c_str()) : 8000;
+
+			auto call_id       = find_header(headers, "Call-ID");
+			if (call_id.has_value() == false)
+				return;
 
 			sip_session_t *ss  = new sip_session_t();
 			ss->start_ts       = get_us();
@@ -406,10 +408,10 @@ void sip::reply_to_INVITE(const sockaddr_in *const a, const int fd, const std::v
 
 			new_session_callback(ss);
 
-			std::thread *th = new std::thread(&sip::session, this, *a, tgt_rtp_port, ss);
+			ss->th = new std::thread(&sip::session, this, *a, tgt_rtp_port, ss);
 
 			slock.lock();
-			sessions.insert({ th, ss });
+			sessions.insert({ call_id.value(), ss });
 			slock.unlock();
 		}
 	}
@@ -424,6 +426,23 @@ void sip::send_ACK(const sockaddr_in *const a, const int fd, const std::vector<s
 
 	if (transmit_packet(a, fd, (const uint8_t *)out.c_str(), out.size()) == false)
 		DOLOG(info, "sip::send_ACK: transmit failed");
+}
+
+void sip::reply_to_BYE(const sockaddr_in *const a, const int fd, const std::vector<std::string> *const headers)
+{
+	auto call_id = find_header(headers, "Call-ID");
+	if (call_id.has_value() == false)
+		return;
+
+	{
+		std::unique_lock<std::mutex> lck(slock);
+
+		auto it = sessions.find(call_id.value());
+
+		it->second->stop_flag = true;
+	}
+
+	send_ACK(a, fd, headers);
 }
 
 void sip::reply_to_UNAUTHORIZED(const sockaddr_in *const a, const int fd, const std::vector<std::string> *const headers)
@@ -583,15 +602,14 @@ bool sip::transmit_audio(const sockaddr_in tgt_addr, sip_session_t *const ss, co
 
 	while(n_audio > 0 && !stop_flag && !ss->stop_flag) {
 		int cur_n_before = std::min(n_audio, ss->schema.frame_size);
-		std::pair<uint8_t *, int> rtpp;
 
-		bool odd = cur_n_before & 1;
-		rtpp = create_rtp_packet(ssrc, *seq_nr, *t, ss->schema, &audio[offset], cur_n_before + odd);
+		bool odd  = cur_n_before & 1;
+		auto rtpp = create_rtp_packet(ssrc, *seq_nr, *t, ss->schema, &audio[offset], cur_n_before + odd);
 
-		offset += cur_n_before;
+		offset  += cur_n_before;
 		n_audio -= cur_n_before;
 
-		(*t) += cur_n_before;
+		(*t)    += cur_n_before;
 
 		(*seq_nr)++;
 
@@ -605,10 +623,8 @@ bool sip::transmit_audio(const sockaddr_in tgt_addr, sip_session_t *const ss, co
 			delete [] rtpp.first;
 		}
 
-		if (n_audio) {  // skip last sleep
-			double sleep = 1000000.0 / (samplerate / double(cur_n_before));
-			myusleep(sleep);
-		}
+		double sleep = 1000000.0 / (samplerate / double(cur_n_before));
+		myusleep(sleep);
 	}
 
 	if (samplerate != ss->schema.rate)
@@ -700,6 +716,8 @@ void sip::session(const struct sockaddr_in tgt_addr, const int tgt_rtp_port, sip
 	send_BYE(&tgt_addr, ss->fd, ss->headers);
 
 	send_REGISTER("", "");  // required?
+
+	audio_recv_thread.join();
 
 	ss->finished  = true;
 
@@ -811,13 +829,14 @@ void sip::session_cleaner()
 	while(!stop_flag) {
 		myusleep(500000);
 
-		slock.lock();
+		std::unique_lock<std::mutex> lck(slock);
+
 		for(auto it=sessions.begin(); it!=sessions.end();) {
 			if (it->second->finished) {
-				it->first->join();
+				it->second->th->join();
 
+				delete it->second->th;
 				delete it->second;
-				delete it->first;
 
 				it = sessions.erase(it);
 			}
@@ -825,7 +844,6 @@ void sip::session_cleaner()
 				it++;
 			}
 		}
-		slock.unlock();
 	}
 }
 

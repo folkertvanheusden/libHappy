@@ -24,6 +24,7 @@ typedef struct {
 } codec_t;
 
 typedef struct _sip_session_ {
+	std::thread       *th            { nullptr };
 	uint64_t           start_ts      { 0 };
 
 	std::atomic_bool   stop_flag     { false };
@@ -46,6 +47,15 @@ typedef struct _sip_session_ {
 	void              *private_data { nullptr };
 
 	_sip_session_() {
+	}
+
+	virtual ~_sip_session_() {
+		src_delete(audio_in_resample);
+		src_delete(audio_out_resample);
+
+		free(private_data);
+
+		close(fd);
 	}
 } sip_session_t;
 
@@ -83,7 +93,7 @@ private:
 	std::thread *th2 { nullptr };
 	std::thread *th3 { nullptr };
 
-	std::map<std::thread *, sip_session_t *> sessions;
+	std::map<std::string, sip_session_t *> sessions;
 	std::mutex slock;
 
 	uint64_t ddos_protection { 0 };
@@ -95,6 +105,7 @@ private:
 	void reply_to_INVITE(const sockaddr_in *const a, const int fd, const std::vector<std::string> *const headers, const std::vector<std::string> *const body);
 
 	void send_BYE(const sockaddr_in *const a, const int fd, const std::vector<std::string> & headers);
+	void reply_to_BYE(const sockaddr_in *const a, const int fd, const std::vector<std::string> *const headers);
 
 	bool transmit_audio(const sockaddr_in tgt_addr, sip_session_t *const ss, const short *const samples, const int n_samples, uint16_t *const seq_nr, uint32_t *const t, const uint32_t ssrc);
 
