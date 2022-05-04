@@ -23,12 +23,19 @@ add_executable(
   testhappy.cpp
 )
 
+add_executable(
+  testhappy-pulseaudio
+  testhappy-pa.cpp
+)
+
 set(CMAKE_THREAD_PREFER_PTHREAD TRUE)
 set(THREADS_PREFER_PTHREAD_FLAG TRUE)
 find_package(Threads)
 target_link_libraries(happy Threads::Threads)
 
 target_link_libraries(testhappy happy)
+
+target_link_libraries(testhappy-pulseaudio happy)
 
 include(FindPkgConfig)
 
@@ -50,5 +57,10 @@ target_compile_options(happy PUBLIC ${SNDFILE_CFLAGS_OTHER})
 find_package(OpenSSL REQUIRED)
 target_include_directories(happy PUBLIC ${OPENSSL_INCLUDE_DIR})
 target_link_libraries(happy OpenSSL::SSL OpenSSL::Crypto)
+
+pkg_check_modules(PA REQUIRED libpulse-simple)
+target_link_libraries(testhappy-pulseaudio ${PA_LIBRARIES})
+target_include_directories(testhappy-pulseaudio PUBLIC ${PA_INCLUDE_DIRS})
+target_compile_options(testhappy-pulseaudio PUBLIC ${PA_CFLAGS_OTHER})
 
 include(FindPkgConfig)
