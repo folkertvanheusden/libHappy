@@ -35,6 +35,7 @@ typedef struct {
 } speex_t;
 
 typedef struct _sip_session_ {
+	// data for library itself
 	std::thread       *th            { nullptr };
 	uint64_t           start_ts      { 0 };
 
@@ -52,11 +53,15 @@ typedef struct _sip_session_ {
 	int                audio_port   { 0 };
 	int                fd           { -1 };
 
-	SRC_STATE         *audio_in_resample  { nullptr };
-	SRC_STATE         *audio_out_resample { nullptr };
-
 	speex_t            spx_in  { 0 };
 	speex_t            spx_out { 0 };
+
+	// callback data
+
+	// samplerate used by callbacks
+	int                samplerate  { 0 };
+	SRC_STATE         *audio_in_resample  { nullptr };
+	SRC_STATE         *audio_out_resample { nullptr };
 
 	void              *private_data { nullptr };
 
