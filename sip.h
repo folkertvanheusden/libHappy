@@ -53,8 +53,8 @@ typedef struct _sip_session_ {
 	int                audio_port   { 0 };
 	int                fd           { -1 };
 
-	speex_t            spx_in  { 0 };
-	speex_t            spx_out { 0 };
+	speex_t            spx_in       { 0 };
+	speex_t            spx_out      { 0 };
 
 	// callback data
 
