@@ -72,8 +72,8 @@ typedef struct _sip_session_ {
 		src_delete(audio_in_resample);
 		src_delete(audio_out_resample);
 
-		speex_encoder_destroy(spx_in.state);
-		speex_encoder_destroy(spx_out.state);
+		// speex_encoder_destroy(spx_in.state);
+		// speex_encoder_destroy(spx_out.state);
 
 		speex_bits_destroy(&spx_in.bits);
 		speex_bits_destroy(&spx_out.bits);
