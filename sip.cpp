@@ -15,6 +15,8 @@
 #include "utils.h"
 
 
+constexpr bool allow_speex = false;
+
 static void resample(SRC_STATE *const state, const short *const in, const int in_rate, const int n_samples, short **const out, const int out_rate, int *const out_n_samples)
 {
 	float *in_float = new float[n_samples];
@@ -307,7 +309,7 @@ codec_t select_schema(const std::vector<std::string> *const body, const int max_
 				pick = true;
 		}
 
-		if (pick) {
+		if (pick && (allow_speex || name.substr(0, 5) != "speex")) {
 			best.rate = rate;
 			best.id = id;
 			best.name = name;
@@ -448,7 +450,8 @@ void sip::reply_to_BYE(const sockaddr_in *const a, const int fd, const std::vect
 
 		auto it = sessions.find(call_id.value());
 
-		it->second->stop_flag = true;
+		if (it != sessions.end())
+			it->second->stop_flag = true;
 	}
 
 	send_ACK(a, fd, headers);
