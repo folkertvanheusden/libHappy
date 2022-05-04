@@ -1,4 +1,4 @@
-// (C) 2021 by folkert van heusden <mail@vanheusden.com>, released under Apache License v2.0
+// (C) 2022 by folkert van heusden <mail@vanheusden.com>, released under Apache License v2.0
 #include <unistd.h>
 
 #include "sip.h"
@@ -49,7 +49,8 @@ int main(int argc, char *argv[])
 	setlog("testhappy.log", debug, debug);
 
 	// remote ip (IP address of upstream asterisk server), my extension-number, my password, my ip, my sip port, samplerate-used-by-callbacks, [callbacks...]
-	sip s("172.29.0.1", "9999", "1234", "172.29.0.107", 5060, 60, 44100, cb_new_session, cb_recv, cb_send, cb_end_session);
+	//sip s("172.29.0.1", "9999", "1234", "172.29.0.107", 5060, 60, 44100, cb_new_session, cb_recv, cb_send, cb_end_session);
+	sip s("192.168.64.1", "9999", "1234", "192.168.65.201", 5060, 60, 44100, cb_new_session, cb_recv, cb_send, cb_end_session);
 
 	// do whatever you like here, the sleep-loop is not required as long
 	// as the sip-object is left instantiated
