@@ -78,8 +78,6 @@ typedef struct _sip_session_ {
 		speex_bits_destroy(&spx_in.bits);
 		speex_bits_destroy(&spx_out.bits);
 
-		free(private_data);
-
 		close(fd);
 	}
 } sip_session_t;
