@@ -4,7 +4,7 @@
 #include <functional>
 #include <map>
 #include <mutex>
-#include <sndfile.h>
+#include <samplerate.h>
 #include <stdint.h>
 #include <string>
 #include <thread>
@@ -39,6 +39,9 @@ typedef struct _sip_session_ {
 
 	int                audio_port   { 0 };
 	int                fd           { -1 };
+
+	SRC_STATE         *audio_in_resample  { nullptr };
+	SRC_STATE         *audio_out_resample { nullptr };
 
 	void              *private_data { nullptr };
 

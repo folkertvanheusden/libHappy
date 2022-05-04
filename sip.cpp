@@ -4,7 +4,6 @@
 #include <optional>
 #include <poll.h>
 #include <samplerate.h>
-#include <sndfile.h>
 #include <stdint.h>
 #include <unistd.h>
 #include <arpa/inet.h>
@@ -21,7 +20,7 @@ typedef struct {
 	SpeexBits bits;
 } speex_t;
 
-static void resample(const short *const in, const int in_rate, const int n_samples, short **const out, const int out_rate, int *const out_n_samples)
+static void resample(SRC_STATE *const state, const short *const in, const int in_rate, const int n_samples, short **const out, const int out_rate, int *const out_n_samples)
 {
 	float *in_float = new float[n_samples];
 	src_short_to_float_array(in, in_float, n_samples);
@@ -40,8 +39,10 @@ static void resample(const short *const in, const int in_rate, const int n_sampl
 	sd.end_of_input = 0;
 	sd.src_ratio = ratio;
 
+	// TODO: src_process gebruiken en dan end_of_input op 0 laten(!)
+
 	int rc = -1;
-	if ((rc = src_simple(&sd, SRC_LINEAR, 1)) != 0)
+	if ((rc = src_process(state, &sd)) != 0)
 		DOLOG(warning, "SIP: resample failed: %s", src_strerror(rc));
 
 	*out = new short[*out_n_samples];
@@ -372,6 +373,13 @@ void sip::reply_to_INVITE(const sockaddr_in *const a, const int fd, const std::v
 			ss->fd             = create_datagram_socket(0);
 			ss->audio_port     = get_local_port(ss->fd);
 
+			int dummy = 0;
+			ss->audio_in_resample  = src_new(SRC_SINC_BEST_QUALITY, 1, &dummy);  // TODO error checking
+			src_set_ratio(ss->audio_in_resample, double(samplerate) / schema.rate);  // TODO error checking
+
+			ss->audio_out_resample = src_new(SRC_SINC_BEST_QUALITY, 1, &dummy);  // TODO error checking
+			src_set_ratio(ss->audio_out_resample, schema.rate / double(samplerate));  // TODO error checking
+
 			content.push_back("a=sendrecv");
 			content.push_back(myformat("a=rtpmap:%u %s/%u", schema.id, schema.org_name.c_str(), schema.rate));
 
@@ -567,7 +575,7 @@ bool sip::transmit_audio(const sockaddr_in tgt_addr, sip_session_t *const ss, co
 		audio   = (short *)audio_in;  // FIXME
 	}
 	else {
-		resample(audio_in, samplerate, n_audio_in, &audio, ss->schema.rate, &n_audio);
+		resample(ss->audio_out_resample, audio_in, samplerate, n_audio_in, &audio, ss->schema.rate, &n_audio);
 	}
 
 	while(n_audio > 0 && !stop_flag && !ss->stop_flag) {
@@ -735,7 +743,7 @@ void sip::audio_input(const uint8_t *const payload, const size_t payload_size, s
 
 			short *result   = nullptr;
 			int    result_n = 0;
-			resample(temp, ss->schema.rate, n_samples, &result, samplerate, &result_n);
+			resample(ss->audio_in_resample, temp, ss->schema.rate, n_samples, &result, samplerate, &result_n);
 			printf("%d -> %d | %d/%d\n", n_samples, result_n, ss->schema.rate, samplerate);
 
 			recv_callback(result, result_n, ss);
@@ -753,7 +761,7 @@ void sip::audio_input(const uint8_t *const payload, const size_t payload_size, s
 
 			short *result   = nullptr;
 			int    result_n = 0;
-			resample(samples, ss->schema.rate, n_samples, &result, samplerate, &result_n);
+			resample(ss->audio_in_resample, samples, ss->schema.rate, n_samples, &result, samplerate, &result_n);
 
 			recv_callback(result, result_n, ss);
 
@@ -775,7 +783,7 @@ void sip::audio_input(const uint8_t *const payload, const size_t payload_size, s
 
 		short *result   = nullptr;
 		int    result_n = 0;
-		resample(of, ss->schema.rate, frame_size, &result, samplerate, &result_n);
+		resample(ss->audio_in_resample, of, ss->schema.rate, frame_size, &result, samplerate, &result_n);
 
 		recv_callback(result, result_n, ss);
 

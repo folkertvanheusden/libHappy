@@ -12,7 +12,7 @@ bool cb_new_session(sip_session_t *const session)
 
 bool cb_recv(const short *const samples, const size_t n_samples, sip_session_t *const session)
 {
-	FILE *fh = fopen("test.smp", "a+");
+	FILE *fh = fopen("test.pcm", "a+");
 	if (fh) {
 		fwrite(samples, sizeof(short), n_samples, fh);
 
