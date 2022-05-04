@@ -395,9 +395,13 @@ void sip::reply_to_INVITE(const sockaddr_in *const a, const int fd, const std::v
 			int tmp = 10;
 			speex_encoder_ctl(ss->spx_out.state, SPEEX_SET_QUALITY, &tmp);
 
+			speex_encoder_ctl(ss->spx_out.state, SPEEX_SET_SAMPLING_RATE, &schema.rate);
+
 			// IN
 			speex_bits_init(&ss->spx_in.bits);
 			ss->spx_in.state = speex_decoder_init(&speex_nb_mode);
+
+			speex_encoder_ctl(ss->spx_in.state, SPEEX_SET_SAMPLING_RATE, (void *)&samplerate);
 
 			content.push_back("a=sendrecv");
 			content.push_back(myformat("a=rtpmap:%u %s/%u", schema.id, schema.org_name.c_str(), schema.rate));
