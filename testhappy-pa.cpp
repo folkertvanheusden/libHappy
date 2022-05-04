@@ -2,7 +2,9 @@
 
 // This program interfaces to pulse-audio.
 
+#include <condition_variable>
 #include <cstring>
+#include <queue>
 #include <signal.h>
 #include <unistd.h>
 #include <pulse/error.h>
@@ -14,9 +16,10 @@
 typedef struct {
 	std::thread *rec_th;  // recorder thread
 
+	std::mutex   buffer_lock;
+	std::condition_variable_any buffer_cv;
 	int          buffer_length;
-	short       *buffer[2];
-	int          buffer_selection;
+	std::queue<short *> buffers;
 
 	pa_simple   *record;  // from pa to voip
 	pa_simple   *play;  // from voip to pa
@@ -48,22 +51,24 @@ bool cb_new_session(sip_session_t *const session)
 
 	p->buffer_length    = session->samplerate * 20 / 1000;
 
-	p->buffer[0]        = new short[p->buffer_length];
-	p->buffer[1]        = new short[p->buffer_length];
-
-	p->buffer_selection = 0;
-
 	p->stop_flag        = &session->stop_flag;
 
 	p->rec_th = new std::thread([p]() {
 			while(!*p->stop_flag) {
-				int error = 0;  // TODO handle errors
-				pa_simple_read(p->record, p->buffer[1 - p->buffer_selection], p->buffer_length * sizeof(short), &error);
+				short *buffer = new short[p->buffer_length];
 
-				// TODO locking
-				p->buffer_selection = 1 - p->buffer_selection;
+				int error = 0;  // TODO handle errors
+				pa_simple_read(p->record, buffer, p->buffer_length * sizeof(short), &error);
+
+				std::unique_lock<std::mutex> lck(p->buffer_lock);
+				p->buffers.push(buffer);
+
+				p->buffer_cv.notify_all();
 			}
 		});
+
+	// some time to let the recording thread fill the queue
+	myusleep(101000);
 
 	return true;
 }
@@ -86,10 +91,24 @@ bool cb_send(short **const samples, size_t *const n_samples, sip_session_t *cons
 {
 	pa_sessions_t *p = reinterpret_cast<pa_sessions_t *>(session->private_data);
 
-	*n_samples = p->buffer_length;
-	*samples   = new short[*n_samples];
+	std::unique_lock<std::mutex> lck(p->buffer_lock);
 
-	memcpy(*samples, p->buffer[p->buffer_selection], p->buffer_length * sizeof(short));
+	using namespace std::chrono_literals;
+
+	while(p->buffers.empty()) {
+		p->buffer_cv.wait_for(lck, 500ms);
+
+		if (*p->stop_flag) {
+			printf("cb_send: terminate by stop_flag\n");
+
+			return false;
+		}
+	}
+
+	*samples   = p->buffers.front();
+	p->buffers.pop();
+
+	*n_samples = p->buffer_length;
 
 	return true;
 }
@@ -100,12 +119,18 @@ void cb_end_session(sip_session_t *const session)
 {
 	printf("cb_end_session\n");
 
-	pa_sessions_t *p = reinterpret_cast<pa_sessions_t *>(session->private_data);
+	pa_sessions_t *p   = reinterpret_cast<pa_sessions_t *>(session->private_data);
 
 	session->stop_flag = true;
 
 	p->rec_th->join();
 	delete p->rec_th;
+
+	while(p->buffers.empty() == false) {
+		delete [] p->buffers.front();
+
+		p->buffers.pop();
+	}
 
 	pa_simple_free(p->play);
 
