@@ -602,8 +602,6 @@ bool sip::transmit_audio(const sockaddr_in tgt_addr, sip_session_t *const ss, co
 		resample(ss->audio_out_resample, audio_in, samplerate, n_audio_in, &audio, ss->schema.rate, &n_audio);
 	}
 
-	uint64_t prev = get_ms();
-
 	while(n_audio > 0 && !stop_flag && !ss->stop_flag) {
 		int cur_n = std::min(n_audio, ss->schema.frame_size);
 
@@ -628,9 +626,6 @@ bool sip::transmit_audio(const sockaddr_in tgt_addr, sip_session_t *const ss, co
 		}
 
 		double sleep = 1000000.0 / (ss->schema.rate / double(cur_n));
-
-			printf("%lu PUT %f | %d\n", get_ms() - prev, sleep / 1000, cur_n);
-			prev = get_ms();
 		myusleep(sleep);
 	}
 
