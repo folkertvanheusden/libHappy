@@ -330,7 +330,7 @@ codec_t select_schema(const std::vector<std::string> *const body, const int max_
 
 	if (best.name.substr(0, 5) == "speex") {
 		void *enc_state = speex_encoder_init(&speex_nb_mode);
-		speex_encoder_ctl(enc_state,SPEEX_GET_FRAME_SIZE, &best.frame_size);
+		speex_encoder_ctl(enc_state, SPEEX_GET_FRAME_SIZE, &best.frame_size);
 		speex_encoder_destroy(enc_state);
 	}
 	else {
