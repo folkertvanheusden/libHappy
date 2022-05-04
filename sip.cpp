@@ -15,7 +15,9 @@
 #include "utils.h"
 
 
-constexpr bool allow_speex = false;
+constexpr bool allow_speex    = false;
+
+constexpr int  frame_duration = 20;  // in milliseconds
 
 static void resample(SRC_STATE *const state, const short *const in, const int in_rate, const int n_samples, short **const out, const int out_rate, int *const out_n_samples)
 {
@@ -235,7 +237,7 @@ static void create_response_headers(const std::string & request, std::vector<std
 
 bool sip::transmit_packet(const sockaddr_in *const a, const int fd, const uint8_t *const data, const size_t data_size)
 {
-	return sendto(fd, data, data_size, MSG_CONFIRM, reinterpret_cast<const struct sockaddr *>(a), sizeof *a) == ssize_t(data_size);
+	return sendto(fd, data, data_size, 0, reinterpret_cast<const struct sockaddr *>(a), sizeof *a) == ssize_t(data_size);
 }
 
 void sip::reply_to_OPTIONS(const sockaddr_in *const a, const int fd, const std::vector<std::string> *const headers)
@@ -333,7 +335,7 @@ codec_t select_schema(const std::vector<std::string> *const body, const int max_
 	}
 	else {
 		// usually 20ms
-		best.frame_size = best.rate * 20 / 1000;
+		best.frame_size = best.rate * frame_duration / 1000;
 	}
 
 	DOLOG(info, "SIP: CODEC chosen: %s/%d (id: %u), frame size: %d\n", best.name.c_str(), best.rate, best.id, best.frame_size);
@@ -600,16 +602,18 @@ bool sip::transmit_audio(const sockaddr_in tgt_addr, sip_session_t *const ss, co
 		resample(ss->audio_out_resample, audio_in, samplerate, n_audio_in, &audio, ss->schema.rate, &n_audio);
 	}
 
+	uint64_t prev = get_ms();
+
 	while(n_audio > 0 && !stop_flag && !ss->stop_flag) {
-		int cur_n_before = std::min(n_audio, ss->schema.frame_size);
+		int cur_n = std::min(n_audio, ss->schema.frame_size);
 
-		bool odd  = cur_n_before & 1;
-		auto rtpp = create_rtp_packet(ssrc, *seq_nr, *t, ss->schema, &audio[offset], cur_n_before + odd, &ss->spx_out);
+		bool odd  = cur_n & 1;
+		auto rtpp = create_rtp_packet(ssrc, *seq_nr, *t, ss->schema, &audio[offset], cur_n + odd, &ss->spx_out);
 
-		offset  += cur_n_before;
-		n_audio -= cur_n_before;
+		offset  += cur_n;
+		n_audio -= cur_n;
 
-		(*t)    += cur_n_before;
+		(*t)    += cur_n;
 
 		(*seq_nr)++;
 
@@ -623,7 +627,10 @@ bool sip::transmit_audio(const sockaddr_in tgt_addr, sip_session_t *const ss, co
 			delete [] rtpp.first;
 		}
 
-		double sleep = 1000000.0 / (samplerate / double(cur_n_before));
+		double sleep = 1000000.0 / (ss->schema.rate / double(cur_n));
+
+			printf("%lu PUT %f | %d\n", get_ms() - prev, sleep / 1000, cur_n);
+			prev = get_ms();
 		myusleep(sleep);
 	}
 

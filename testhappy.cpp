@@ -24,7 +24,21 @@ bool cb_recv(const short *const samples, const size_t n_samples, sip_session_t *
 
 bool cb_send(short **const samples, size_t *const n_samples, sip_session_t *const session)
 {
-	generate_beep(440, 1., sample_rate, samples, n_samples);
+	FILE *fh = fopen("play.raw", "rb");
+	if (fh) {
+		fseek(fh, 0, SEEK_END);
+		off_t len = ftell(fh);
+		fseek(fh, 0, SEEK_SET);
+
+		*n_samples = len / 2;
+		*samples   = new short[*n_samples];
+
+		fread(*samples, sizeof(short), *n_samples, fh);
+
+		fclose(fh);
+	}
+
+	// generate_beep(440, 0.02, sample_rate, samples, n_samples);
 
 	return true;
 }
