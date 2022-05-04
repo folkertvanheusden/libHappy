@@ -606,8 +606,7 @@ bool sip::transmit_audio(const sockaddr_in tgt_addr, sip_session_t *const ss, co
 	while(n_audio > 0 && !stop_flag && !ss->stop_flag) {
 		int cur_n = std::min(n_audio, ss->schema.frame_size);
 
-		bool odd  = cur_n & 1;
-		auto rtpp = create_rtp_packet(ssrc, *seq_nr, *t, ss->schema, &audio[offset], cur_n + odd, &ss->spx_out);
+		auto rtpp = create_rtp_packet(ssrc, *seq_nr, *t, ss->schema, &audio[offset], cur_n, &ss->spx_out);
 
 		offset  += cur_n;
 		n_audio -= cur_n;
