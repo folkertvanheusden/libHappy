@@ -1,4 +1,4 @@
-See testhappy.cpp for an explanation how to use the library.
+See testhappy.cpp for an explanation how to use the library in your own program.
 
 
 required packages:
@@ -9,6 +9,9 @@ required packages:
 
 for the pulse audio test program:
 * libpulse-dev
+
+
+This library has been tested with the Asterisk VOIP server application.
 
 
 (written by) Folkert van Heusden
