@@ -419,14 +419,15 @@ void sip::reply_to_INVITE(const sockaddr_in *const a, const int fd, const std::v
 			// send INVITE reply
 			if (transmit_packet(a, fd, (const uint8_t *)out.c_str(), out.size()) == false)
 				DOLOG(info, "sip::reply_to_INVITE: transmit failed");
+			else {
+				new_session_callback(ss);
 
-			new_session_callback(ss);
+				ss->th = new std::thread(&sip::session, this, *a, tgt_rtp_port, ss);
 
-			ss->th = new std::thread(&sip::session, this, *a, tgt_rtp_port, ss);
+				std::unique_lock<std::mutex> lck(slock);
 
-			slock.lock();
-			sessions.insert({ call_id.value(), ss });
-			slock.unlock();
+				sessions.insert({ call_id.value(), ss });
+			}
 		}
 	}
 }
