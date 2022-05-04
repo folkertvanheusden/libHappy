@@ -14,6 +14,6 @@ for the pulse audio test program:
 This library has been tested with the Asterisk VOIP server application.
 
 
-(written by) Folkert van Heusden
+written by Folkert van Heusden
 
-release under apache license v2
+released under apache license v2
