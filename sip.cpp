@@ -15,11 +15,6 @@
 #include "utils.h"
 
 
-typedef struct {
-	void *state;
-	SpeexBits bits;
-} speex_t;
-
 static void resample(SRC_STATE *const state, const short *const in, const int in_rate, const int n_samples, short **const out, const int out_rate, int *const out_n_samples)
 {
 	float *in_float = new float[n_samples];
@@ -378,12 +373,26 @@ void sip::reply_to_INVITE(const sockaddr_in *const a, const int fd, const std::v
 			ss->fd             = create_datagram_socket(0);
 			ss->audio_port     = get_local_port(ss->fd);
 
+			// init audio resampler
 			int dummy = 0;
 			ss->audio_in_resample  = src_new(SRC_SINC_BEST_QUALITY, 1, &dummy);  // TODO error checking
 			src_set_ratio(ss->audio_in_resample, double(samplerate) / schema.rate);  // TODO error checking
 
 			ss->audio_out_resample = src_new(SRC_SINC_BEST_QUALITY, 1, &dummy);  // TODO error checking
 			src_set_ratio(ss->audio_out_resample, schema.rate / double(samplerate));  // TODO error checking
+
+			// init speex
+			// OUT
+			speex_bits_init(&ss->spx_out.bits);
+
+			ss->spx_out.state = speex_encoder_init(&speex_nb_mode);
+
+			int tmp = 10;
+			speex_encoder_ctl(ss->spx_out.state, SPEEX_SET_QUALITY, &tmp);
+
+			// IN
+			speex_bits_init(&ss->spx_in.bits);
+			ss->spx_in.state = speex_decoder_init(&speex_nb_mode);
 
 			content.push_back("a=sendrecv");
 			content.push_back(myformat("a=rtpmap:%u %s/%u", schema.id, schema.org_name.c_str(), schema.rate));
@@ -486,7 +495,7 @@ void sip::reply_to_UNAUTHORIZED(const sockaddr_in *const a, const int fd, const 
 	send_REGISTER(call_id_str, authorize);
 }
 
-static std::pair<uint8_t *, int> create_rtp_packet(const uint32_t ssrc, const uint16_t seq_nr, const uint32_t t, const codec_t & schema, const short *const samples, const int n_samples)
+static std::pair<uint8_t *, int> create_rtp_packet(const uint32_t ssrc, const uint16_t seq_nr, const uint32_t t, const codec_t & schema, const short *const samples, const int n_samples, speex_t *const spx)
 {
 	int sample_size = 0;
 
@@ -528,28 +537,16 @@ static std::pair<uint8_t *, int> create_rtp_packet(const uint32_t ssrc, const ui
 		}
 	}
 	else if (schema.name.substr(0, 5) == "speex") { // speex
-		speex_t spx { 0 };
-
-		speex_bits_init(&spx.bits);
-		speex_bits_reset(&spx.bits);
-
-		spx.state = speex_encoder_init(&speex_nb_mode);
-
-		int tmp = 10;
-		speex_encoder_ctl(spx.state, SPEEX_SET_QUALITY, &tmp);
-
 		// is this required?
 		short *input = new short[n_samples];
 		memcpy(input, samples, n_samples * sizeof(short));
 
-		speex_encode_int(spx.state, input, &spx.bits);
+		speex_bits_reset(&spx->bits);
+		speex_encode_int(spx->state, input, &spx->bits);
 
-		size_t new_size = 12 + speex_bits_write(&spx.bits, (char *)&rtp_packet[12], size - 12);
+		size_t new_size = 12 + speex_bits_write(&spx->bits, (char *)&rtp_packet[12], size - 12);
 
 		delete [] input;
-
-		speex_encoder_destroy(spx.state);
-		speex_bits_destroy(&spx.bits);
 
 		if (new_size > size) {
 			DOLOG(ll_error, "SIP: speex decoded data too big (%ld > %ld)\n", new_size, size);
@@ -604,7 +601,7 @@ bool sip::transmit_audio(const sockaddr_in tgt_addr, sip_session_t *const ss, co
 		int cur_n_before = std::min(n_audio, ss->schema.frame_size);
 
 		bool odd  = cur_n_before & 1;
-		auto rtpp = create_rtp_packet(ssrc, *seq_nr, *t, ss->schema, &audio[offset], cur_n_before + odd);
+		auto rtpp = create_rtp_packet(ssrc, *seq_nr, *t, ss->schema, &audio[offset], cur_n_before + odd, &ss->spx_out);
 
 		offset  += cur_n_before;
 		n_audio -= cur_n_before;
@@ -792,17 +789,15 @@ void sip::audio_input(const uint8_t *const payload, const size_t payload_size, s
 		}
 	}
 	else if (ss->schema.name.substr(0, 5) == "speex") { // speex
-		speex_t spx { 0 };
-		speex_bits_init(&spx.bits);
-		spx.state = speex_decoder_init(&speex_nb_mode);
-
-		speex_bits_read_from(&spx.bits, (char *)&payload[12], payload_size - 12);
+		speex_bits_read_from(&ss->spx_in.bits, (char *)&payload[12], payload_size - 12);
 
 		int frame_size = 0;
-		speex_decoder_ctl(spx.state, SPEEX_GET_FRAME_SIZE, &frame_size);
+		speex_decoder_ctl(ss->spx_in.state, SPEEX_GET_FRAME_SIZE, &frame_size);
+
+		speex_bits_reset(&ss->spx_in.bits);
 
 		short *of = new short[frame_size];
-		speex_decode_int(spx.state, &spx.bits, of);
+		speex_decode_int(ss->spx_in.state, &ss->spx_in.bits, of);
 
 		short *result   = nullptr;
 		int    result_n = 0;
@@ -813,9 +808,6 @@ void sip::audio_input(const uint8_t *const payload, const size_t payload_size, s
 		delete [] result;
 
 		delete [] of;
-
-		speex_bits_destroy(&spx.bits);
-		speex_decoder_destroy(spx.state);
 	}
 	else {
 		DOLOG(warning, "SIP: unsupported incoming schema %s/%d\n", ss->schema.name.c_str(), ss->schema.rate);
