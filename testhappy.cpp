@@ -24,7 +24,7 @@ bool cb_recv(const short *const samples, const size_t n_samples, sip_session_t *
 
 bool cb_send(short **const samples, size_t *const n_samples, sip_session_t *const session)
 {
-	generate_beep(440, 0.1, sample_rate, samples, n_samples);
+	generate_beep(440, 1., sample_rate, samples, n_samples);
 
 	return true;
 }

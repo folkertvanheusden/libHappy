@@ -26,24 +26,27 @@ static void resample(SRC_STATE *const state, const short *const in, const int in
 	src_short_to_float_array(in, in_float, n_samples);
 
 	double ratio = out_rate / double(in_rate);
-	*out_n_samples = n_samples * ratio;
-	float *out_float = new float[*out_n_samples];
 
-	SRC_DATA sd;
-	sd.data_in = in_float;
-	sd.data_out = out_float;
-	sd.input_frames = n_samples;
-	sd.output_frames = *out_n_samples;
+	size_t n_out_allocated = ceil(n_samples * ratio);
+	float *out_float = new float[n_out_allocated];
+
+	SRC_DATA sd { 0 };
+	sd.data_in           = in_float;
+	sd.data_out          = out_float;
+	sd.input_frames      = n_samples;
+	sd.output_frames     = n_out_allocated;
 	sd.input_frames_used = 0;
 	sd.output_frames_gen = 0;
-	sd.end_of_input = 0;
-	sd.src_ratio = ratio;
-
-	// TODO: src_process gebruiken en dan end_of_input op 0 laten(!)
+	sd.end_of_input      = 0;
+	sd.src_ratio         = ratio;
 
 	int rc = -1;
 	if ((rc = src_process(state, &sd)) != 0)
 		DOLOG(warning, "SIP: resample failed: %s", src_strerror(rc));
+
+	printf("%ld %ld\n", sd.input_frames_used, sd.output_frames_gen);
+
+	*out_n_samples = sd.output_frames_gen;
 
 	*out = new short[*out_n_samples];
 	src_float_to_short_array(out_float, *out, *out_n_samples);
@@ -602,8 +605,10 @@ bool sip::transmit_audio(const sockaddr_in tgt_addr, sip_session_t *const ss, co
 			delete [] rtpp.first;
 		}
 
-		double sleep = 1000000.0 / (samplerate / double(cur_n_before));
-		myusleep(sleep);
+		if (n_audio) {  // skip last sleep
+			double sleep = 1000000.0 / (samplerate / double(cur_n_before));
+			myusleep(sleep);
+		}
 	}
 
 	if (samplerate != ss->schema.rate)
@@ -635,7 +640,7 @@ void sip::wait_for_audio(sip_session_t *const ss)
 			ssize_t rc = recvfrom(ss->fd, buffer, sizeof buffer, 0, reinterpret_cast<struct sockaddr *>(&addr), &addr_len);
 
 			if (rc > 0) {
-				DOLOG(debug, "sip::wait_for_audio: audio received (%zd bytes) from %s:%d\n", rc, sockaddr_to_str(addr).c_str(), ntohs(addr.sin_port));
+				// DOLOG(debug, "sip::wait_for_audio: audio received (%zd bytes) from %s:%d\n", rc, sockaddr_to_str(addr).c_str(), ntohs(addr.sin_port));
 
 				audio_input(buffer, rc, ss);
 			}
@@ -744,7 +749,7 @@ void sip::audio_input(const uint8_t *const payload, const size_t payload_size, s
 			short *result   = nullptr;
 			int    result_n = 0;
 			resample(ss->audio_in_resample, temp, ss->schema.rate, n_samples, &result, samplerate, &result_n);
-			printf("%d -> %d | %d/%d\n", n_samples, result_n, ss->schema.rate, samplerate);
+			// printf("%d -> %d | %d/%d\n", n_samples, result_n, ss->schema.rate, samplerate);
 
 			recv_callback(result, result_n, ss);
 
