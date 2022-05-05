@@ -251,7 +251,7 @@ void sip::reply_to_OPTIONS(const sockaddr_in *const a, const int fd, const std::
 	content.push_back("s=Happy");
 	content.push_back("t=0 0");
 	// 1234 could be allocated but as this is send-
-	// only, it is not relevant
+	// only, it is not relevant  <--- TODO this comment needs to be re-evaluated
 	content.push_back("m=audio 1234 RTP/AVP 8 11 97");
 	content.push_back("a=sendrecv");
 	content.push_back(myformat("a=rtpmap:8 PCMA/%u", samplerate));
