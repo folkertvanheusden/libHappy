@@ -10,6 +10,8 @@ required packages:
 for the pulse audio test program:
 * libpulse-dev
 
+You need 'cmake' (and 'build-essentials' on debian/ubuntu) to build the library/test programs.
+
 
 This library has been tested with the Asterisk VOIP server application.
 
