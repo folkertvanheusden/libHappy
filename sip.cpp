@@ -450,8 +450,12 @@ void sip::send_ACK(const sockaddr_in *const a, const int fd, const std::vector<s
 void sip::reply_to_BYE(const sockaddr_in *const a, const int fd, const std::vector<std::string> *const headers)
 {
 	auto call_id = find_header(headers, "Call-ID");
-	if (call_id.has_value() == false)
+
+	if (call_id.has_value() == false) {
+		DOLOG(warning, "sip::reply_to_BYE: \"Call-ID\" not found in headers\n");
+
 		return;
+	}
 
 	{
 		std::unique_lock<std::mutex> lck(slock);
@@ -460,6 +464,8 @@ void sip::reply_to_BYE(const sockaddr_in *const a, const int fd, const std::vect
 
 		if (it != sessions.end())
 			it->second->stop_flag = true;
+		else
+			DOLOG(warning, "sip::reply_to_BYE: session \"%s\" not found\n", call_id.value().c_str());
 	}
 
 	send_ACK(a, fd, headers);
@@ -725,6 +731,8 @@ void sip::session(const struct sockaddr_in tgt_addr, const int tgt_rtp_port, sip
 	send_REGISTER("", "");  // required?
 
 	audio_recv_thread.join();
+
+	end_session_callback(ss);
 
 	ss->finished  = true;
 
