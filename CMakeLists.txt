@@ -33,6 +33,9 @@ set(THREADS_PREFER_PTHREAD_FLAG TRUE)
 find_package(Threads)
 target_link_libraries(happy Threads::Threads)
 
+# for RPI
+target_link_libraries(happy atomic)
+
 target_link_libraries(testhappy happy)
 
 target_link_libraries(testhappy-pulseaudio happy)
