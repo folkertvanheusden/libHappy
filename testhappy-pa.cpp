@@ -77,7 +77,7 @@ bool cb_new_session(sip_session_t *const session)
 				t_avg = (t_avg * gain_n_samples + avg) / (gain_n_samples + 1);
 
 				// apply
-				double gain = std::min(5.0, 32767 / std::max(1.0, t_avg));
+				double gain = std::max(1.0, std::min(5.0, 32767 / std::max(1.0, t_avg)));
 
 				for(int i=0; i<p->buffer_length; i++)
 					buffer[i] *= gain;
