@@ -17,8 +17,6 @@
 
 constexpr bool allow_speex    = false;
 
-constexpr int  frame_duration = 20;  // in milliseconds
-
 static void resample(SRC_STATE *const state, const short *const in, const int in_rate, const int n_samples, short **const out, const int out_rate, int *const out_n_samples)
 {
 	float *in_float = new float[n_samples];
@@ -143,6 +141,8 @@ void sip::sip_input(const sockaddr_in *const a, const int fd, uint8_t *const pay
 		return;
 
 	std::string              pl_str       = std::string((const char *)payload, payload_size);
+
+	// DOLOG(debug, "sip::sip_input: %s\n", pl_str.c_str());
 
 	std::vector<std::string> header_body  = split(pl_str, "\r\n\r\n");
 
@@ -277,7 +277,17 @@ codec_t select_schema(const std::vector<std::string> *const body, const int max_
 {
 	codec_t best { 255, "", "", -1 };
 
+	int     frame_duration = 20;
+
 	for(std::string line : *body) {
+		if (line.substr(0, 11) == "a=maxptime:") {
+			// 20ms min for sanity
+			frame_duration = std::max(20, atoi(line.substr(11).c_str()));
+
+			DOLOG(debug, "select_schema: frame duration set to %dms\n", frame_duration);
+			continue;
+		}
+
 		if (line.substr(0, 9) != "a=rtpmap:")
 			continue;
 
