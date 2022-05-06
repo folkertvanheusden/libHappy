@@ -16,6 +16,8 @@
 typedef struct {
 	std::thread *rec_th;  // recorder thread
 
+	int          fragment_size;
+
 	std::mutex   buffer_lock;
 	std::condition_variable_any buffer_cv;
 	int          buffer_length;
@@ -49,16 +51,40 @@ bool cb_new_session(sip_session_t *const session)
 
 	p->play   = pa_simple_new(NULL, "libHappy", PA_STREAM_PLAYBACK, NULL, "playback", &ss, NULL, NULL, &error);
 
-	int fragment_size   = 20;  // in ms
+	p->fragment_size    = 20;  // in ms
 
-	p->buffer_length    = session->samplerate * fragment_size / 1000;
+	p->buffer_length    = session->samplerate * p->fragment_size / 1000;
 
 	p->stop_flag        = &session->stop_flag;
 
-	p->rec_th = new std::thread([p, fragment_size]() {
+	p->rec_th           = nullptr;
+
+	return true;
+}
+
+// invoked when the peer produces audio and which is then
+// received by us
+bool cb_recv(const short *const samples, const size_t n_samples, sip_session_t *const session)
+{
+	pa_sessions_t *p = reinterpret_cast<pa_sessions_t *>(session->private_data);
+
+	int error = 0;  // TODO handle errors
+	pa_simple_write(p->play, samples, n_samples * sizeof(short), &error);
+
+	return true;
+}
+
+// invoked when the library wants to send audio to
+// the peer
+bool cb_send(short **const samples, size_t *const n_samples, sip_session_t *const session)
+{
+	pa_sessions_t *p = reinterpret_cast<pa_sessions_t *>(session->private_data);
+
+	if (p->rec_th == nullptr) {
+		p->rec_th = new std::thread([p]() {
 			double t_avg = 0;
 
-			double  gain_n_samples = 150.0 / fragment_size;  // calculate fragment over 150ms
+			double  gain_n_samples = 150.0 / p->fragment_size;  // calculate fragment over 150ms
 
 			while(!*p->stop_flag) {
 				short *buffer = new short[p->buffer_length];
@@ -88,30 +114,7 @@ bool cb_new_session(sip_session_t *const session)
 				p->buffer_cv.notify_all();
 			}
 		});
-
-	// some time to let the recording thread fill the queue
-	myusleep(101000);
-
-	return true;
-}
-
-// invoked when the peer produces audio and which is then
-// received by us
-bool cb_recv(const short *const samples, const size_t n_samples, sip_session_t *const session)
-{
-	pa_sessions_t *p = reinterpret_cast<pa_sessions_t *>(session->private_data);
-
-	int error = 0;  // TODO handle errors
-	pa_simple_write(p->play, samples, n_samples * sizeof(short), &error);
-
-	return true;
-}
-
-// invoked when the library wants to send audio to
-// the peer
-bool cb_send(short **const samples, size_t *const n_samples, sip_session_t *const session)
-{
-	pa_sessions_t *p = reinterpret_cast<pa_sessions_t *>(session->private_data);
+	}
 
 	std::unique_lock<std::mutex> lck(p->buffer_lock);
 
