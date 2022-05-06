@@ -57,6 +57,7 @@ typedef struct _sip_session_ {
 	speex_t            spx_out      { 0 };
 
 	// callback data
+	std::string        call_id;
 
 	// samplerate used by callbacks
 	int                samplerate  { 0 };

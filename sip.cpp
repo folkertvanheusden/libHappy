@@ -377,6 +377,7 @@ void sip::reply_to_INVITE(const sockaddr_in *const a, const int fd, const std::v
 			ss->fd             = create_datagram_socket(0);
 			ss->audio_port     = get_local_port(ss->fd);
 			ss->samplerate     = samplerate;
+			ss->call_id        = call_id.value();
 
 			// init audio resampler
 			int dummy = 0;

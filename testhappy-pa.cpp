@@ -39,7 +39,7 @@ const pa_sample_spec ss = {
 // e.g. the end_session callback.
 bool cb_new_session(sip_session_t *const session)
 {
-	printf("cb_new_session\n");
+	printf("cb_new_session, call-id: %s\n", session->call_id.c_str());
 
 	session->private_data = new pa_sessions_t;
 	pa_sessions_t *p = reinterpret_cast<pa_sessions_t *>(session->private_data);
@@ -139,7 +139,7 @@ bool cb_send(short **const samples, size_t *const n_samples, sip_session_t *cons
 // the session thus ends)
 void cb_end_session(sip_session_t *const session)
 {
-	printf("cb_end_session\n");
+	printf("cb_end_session, call-id: %s\n", session->call_id.c_str());
 
 	pa_sessions_t *p   = reinterpret_cast<pa_sessions_t *>(session->private_data);
 
