@@ -42,6 +42,15 @@ void cb_end_session(sip_session_t *const session)
 {
 }
 
+// invoked when a DTMF signal has been received
+// note that may come in multiple times for the
+// same key-press. this is due to how they are
+// transmitted
+void cb_dtmf(const uint8_t dtmf_code, sip_session_t *const session)
+{
+	printf("DTMF pressed: %d\n", dtmf_code);
+}
+
 int main(int argc, char *argv[])
 {
 	// filename, loglevel for logging to file, level for logging to screen
@@ -49,8 +58,8 @@ int main(int argc, char *argv[])
 	setlog("testhappy.log", debug, debug);
 
 	// remote ip (IP address of upstream asterisk server), my extension-number, my password, my ip, my sip port, samplerate-used-by-callbacks, [callbacks...]
-	//sip s("172.29.0.1", "9999", "1234", "172.29.0.107", 5060, 60, 44100, cb_new_session, cb_recv, cb_send, cb_end_session);
-	sip s("192.168.64.1", "9999", "1234", "192.168.65.201", 5060, 60, 44100, cb_new_session, cb_recv, cb_send, cb_end_session);
+	//sip s("172.29.0.1", "9999", "1234", "172.29.0.107", 5060, 60, 44100, cb_new_session, cb_recv, cb_send, cb_end_session, cb_dtmf);
+	sip s("192.168.64.1", "9999", "1234", "192.168.65.201", 5060, 60, 44100, cb_new_session, cb_recv, cb_send, cb_end_session, cb_dtmf);
 
 	// do whatever you like here, the sleep-loop is not required as long
 	// as the sip-object is left instantiated

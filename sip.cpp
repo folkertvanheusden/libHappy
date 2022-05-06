@@ -82,12 +82,13 @@ sip::sip(const std::string & upstream_sip_server, const std::string & upstream_s
 		std::function<bool(sip_session_t *const session)> new_session_callback,
 		std::function<bool(const short *const samples, const size_t n_samples, sip_session_t *const session)> recv_callback,
 		std::function<bool(short **const samples, size_t *const n_samples, sip_session_t *const session)> send_callback,
-		std::function<void(sip_session_t *const session)> end_session_callback) :
+		std::function<void(sip_session_t *const session)> end_session_callback,
+		std::function<void(const uint8_t dtmf_code, sip_session_t *const session)> dtmf_callback) :
 	upstream_server(upstream_sip_server), username(upstream_sip_user), password(upstream_sip_password),
 	myip(myip), myport(myport),
 	interval(sip_register_interval),
 	samplerate(samplerate),
-	new_session_callback(new_session_callback), recv_callback(recv_callback), send_callback(send_callback), end_session_callback(end_session_callback)
+	new_session_callback(new_session_callback), recv_callback(recv_callback), send_callback(send_callback), end_session_callback(end_session_callback), dtmf_callback(dtmf_callback)
 {
 	th1 = new std::thread(&sip::session_cleaner, this);  // session cleaner
 
@@ -257,6 +258,7 @@ void sip::reply_to_OPTIONS(const sockaddr_in *const a, const int fd, const std::
 	content.push_back(myformat("a=rtpmap:8 PCMA/%u", samplerate));
 	content.push_back(myformat("a=rtpmap:11 L16/%u", samplerate));
 	content.push_back(myformat("a=rtpmap:97 speex/%u", samplerate));
+	content.push_back(myformat("a=rtpmap:101 telephone-event/%u", samplerate));
 	content.push_back("a=fmtp:97 mode=\"1,any\";vbr=on");
 
 	std::string content_out = merge(content, "\r\n");
@@ -670,9 +672,16 @@ void sip::wait_for_audio(sip_session_t *const ss)
 			ssize_t rc = recvfrom(ss->fd, buffer, sizeof buffer, 0, reinterpret_cast<struct sockaddr *>(&addr), &addr_len);
 
 			if (rc > 0) {
-				// DOLOG(debug, "sip::wait_for_audio: audio received (%zd bytes) from %s:%d\n", rc, sockaddr_to_str(addr).c_str(), ntohs(addr.sin_port));
+				if ((buffer[1] & 127) == 101) {
+				      	// 101 is statically assigned (in this library) to "telephone-event" rtp-type
+					dolog(debug, "TELEPHONE EVENT %d, %02x\n", buffer[12], buffer[13]);
 
-				audio_input(buffer, rc, ss);
+					if (buffer[13] & 128)  // end of dtmf
+						dtmf_callback(buffer[12], ss);
+				}
+				else {
+					audio_input(buffer, rc, ss);
+				}
 			}
 		}
 	}
