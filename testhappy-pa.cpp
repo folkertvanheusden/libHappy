@@ -49,16 +49,38 @@ bool cb_new_session(sip_session_t *const session)
 
 	p->play   = pa_simple_new(NULL, "libHappy", PA_STREAM_PLAYBACK, NULL, "playback", &ss, NULL, NULL, &error);
 
-	p->buffer_length    = session->samplerate * 20 / 1000;
+	int fragment_size   = 20;  // in ms
+
+	p->buffer_length    = session->samplerate * fragment_size / 1000;
 
 	p->stop_flag        = &session->stop_flag;
 
-	p->rec_th = new std::thread([p]() {
+	p->rec_th = new std::thread([p, fragment_size]() {
+			double t_avg = 0;
+
+			double  gain_n_samples = 150.0 / fragment_size;  // calculate fragment over 150ms
+
 			while(!*p->stop_flag) {
 				short *buffer = new short[p->buffer_length];
 
 				int error = 0;  // TODO handle errors
 				pa_simple_read(p->record, buffer, p->buffer_length * sizeof(short), &error);
+
+				// update moving average for gain
+				double avg = 0;
+
+				for(int i=0; i<p->buffer_length; i++)
+					avg += buffer[i];
+
+				avg /= p->buffer_length;
+
+				t_avg = (t_avg * gain_n_samples + avg) / (gain_n_samples + 1);
+
+				// apply
+				double gain = std::min(5.0, 32767 / std::max(1.0, t_avg));
+
+				for(int i=0; i<p->buffer_length; i++)
+					buffer[i] *= gain;
 
 				std::unique_lock<std::mutex> lck(p->buffer_lock);
 				p->buffers.push(buffer);
@@ -152,7 +174,8 @@ int main(int argc, char *argv[])
 	setlog("testhappy.log", debug, debug);
 
 	// remote ip (IP address of upstream asterisk server), my extension-number, my password, my ip, my sip port, samplerate-used-by-callbacks, [callbacks...]
-	sip s("192.168.64.1", "9999", "1234", "192.168.65.158", 5060, 60, 44100, cb_new_session, cb_recv, cb_send, cb_end_session);
+	// sip s("192.168.64.1", "9999", "1234", "192.168.65.158", 5060, 60, 44100, cb_new_session, cb_recv, cb_send, cb_end_session);
+	sip s("10.208.11.13", "3131", "1234", "10.208.42.59", 5060, 60, 44100, cb_new_session, cb_recv, cb_send, cb_end_session);
 
 	// do whatever you like here
 	pause();
