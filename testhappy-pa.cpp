@@ -16,8 +16,6 @@
 typedef struct {
 	std::thread *rec_th;  // recorder thread
 
-	int          fragment_size;
-
 	std::mutex   buffer_lock;
 	std::condition_variable_any buffer_cv;
 	int          buffer_length;
@@ -51,9 +49,7 @@ bool cb_new_session(sip_session_t *const session)
 
 	p->play   = pa_simple_new(NULL, "libHappy", PA_STREAM_PLAYBACK, NULL, "playback", &ss, NULL, NULL, &error);
 
-	p->fragment_size    = 20;  // in ms
-
-	p->buffer_length    = session->samplerate * p->fragment_size / 1000;
+	p->buffer_length    = session->samplerate * session->schema.frame_size / 1000;
 
 	p->stop_flag        = &session->stop_flag;
 
@@ -81,10 +77,10 @@ bool cb_send(short **const samples, size_t *const n_samples, sip_session_t *cons
 	pa_sessions_t *p = reinterpret_cast<pa_sessions_t *>(session->private_data);
 
 	if (p->rec_th == nullptr) {
-		p->rec_th = new std::thread([p]() {
+		p->rec_th = new std::thread([p, session]() {
 			double t_avg = 0;
 
-			double  gain_n_samples = 300.0 / p->fragment_size;  // calculate fragment over 300ms
+			double  gain_n_samples = 300.0 / session->schema.frame_size; // calculate fragment over 300ms
 
 			while(!*p->stop_flag) {
 				short *buffer = new short[p->buffer_length];
