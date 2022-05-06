@@ -84,7 +84,7 @@ bool cb_send(short **const samples, size_t *const n_samples, sip_session_t *cons
 		p->rec_th = new std::thread([p]() {
 			double t_avg = 0;
 
-			double  gain_n_samples = 150.0 / p->fragment_size;  // calculate fragment over 150ms
+			double  gain_n_samples = 300.0 / p->fragment_size;  // calculate fragment over 300ms
 
 			while(!*p->stop_flag) {
 				short *buffer = new short[p->buffer_length];
@@ -103,7 +103,7 @@ bool cb_send(short **const samples, size_t *const n_samples, sip_session_t *cons
 				t_avg = (t_avg * gain_n_samples + avg) / (gain_n_samples + 1);
 
 				// apply
-				double gain = std::max(1.0, std::min(5.0, 32767 / std::max(1.0, t_avg)));
+				double gain = std::max(1.5, std::min(5.0, 32767 / std::max(1.0, t_avg)));
 
 				for(int i=0; i<p->buffer_length; i++)
 					buffer[i] *= gain;
