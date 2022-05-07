@@ -101,6 +101,7 @@ bool cb_send(short **const samples, size_t *const n_samples, sip_session_t *cons
 				// apply
 				double gain = std::max(1.5, std::min(5.0, 32767 / std::max(1.0, t_avg)));
 
+				// TODO clamp to -1...1
 				for(int i=0; i<p->buffer_length; i++)
 					buffer[i] *= gain;
 
