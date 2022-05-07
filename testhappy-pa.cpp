@@ -49,7 +49,7 @@ bool cb_new_session(sip_session_t *const session)
 
 	p->play   = pa_simple_new(NULL, "libHappy", PA_STREAM_PLAYBACK, NULL, "playback", &ss, NULL, NULL, &error);
 
-	p->buffer_length    = session->samplerate * session->schema.frame_size / 1000;
+	p->buffer_length    = session->samplerate * session->schema.frame_duration / 1000;
 
 	p->stop_flag        = &session->stop_flag;
 
@@ -80,7 +80,7 @@ bool cb_send(short **const samples, size_t *const n_samples, sip_session_t *cons
 		p->rec_th = new std::thread([p, session]() {
 			double t_avg = 0;
 
-			double  gain_n_samples = 300.0 / session->schema.frame_size; // calculate fragment over 300ms
+			double  gain_n_samples = 300.0 / session->schema.frame_duration; // calculate fragment over 300ms
 
 			while(!*p->stop_flag) {
 				short *buffer = new short[p->buffer_length];

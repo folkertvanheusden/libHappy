@@ -275,7 +275,7 @@ void sip::reply_to_OPTIONS(const sockaddr_in *const a, const int fd, const std::
 
 codec_t select_schema(const std::vector<std::string> *const body, const int max_rate)
 {
-	codec_t best { 255, "", "", -1 };
+	codec_t best { 255, "", "", -1, -1 };
 
 	int     frame_duration = 20;
 
@@ -344,10 +344,13 @@ codec_t select_schema(const std::vector<std::string> *const body, const int max_
 		void *enc_state = speex_encoder_init(&speex_nb_mode);
 		speex_encoder_ctl(enc_state, SPEEX_GET_FRAME_SIZE, &best.frame_size);
 		speex_encoder_destroy(enc_state);
+
+		// TODO best.frame_duration
 	}
 	else {
 		// usually 20ms
-		best.frame_size = best.rate * frame_duration / 1000;
+		best.frame_size     = best.rate * frame_duration / 1000;
+		best.frame_duration = frame_duration;
 	}
 
 	DOLOG(info, "SIP: CODEC chosen: %s/%d (id: %u), frame size: %d\n", best.name.c_str(), best.rate, best.id, best.frame_size);
@@ -829,6 +832,7 @@ void sip::audio_input(const uint8_t *const payload, const size_t payload_size, s
 	else if (ss->schema.name.substr(0, 5) == "speex") { // speex
 		speex_bits_read_from(&ss->spx_in.bits, (char *)&payload[12], payload_size - 12);
 
+		// TODO: not just the size of the packet?
 		int frame_size = 0;
 		speex_decoder_ctl(ss->spx_in.state, SPEEX_GET_FRAME_SIZE, &frame_size);
 

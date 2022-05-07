@@ -26,6 +26,7 @@ typedef struct {
 	int         rate;
 
 	int         frame_size;
+	int         frame_duration;
 } codec_t;
 
 typedef struct {
