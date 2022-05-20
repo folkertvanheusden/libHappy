@@ -44,7 +44,9 @@ bool cb_new_session(sip_session_t *const session)
 	session->private_data = new pa_sessions_t;
 	pa_sessions_t   *p = reinterpret_cast<pa_sessions_t *>(session->private_data);
 
-	p->buffer_length   = session->samplerate * session->schema.frame_duration / 1000;
+	p->buffer_length   = ss.rate * 2 /* 16b */ * session->schema.frame_duration / 1000;
+
+	printf("buffer length: %d, frame size: %d, frame duration %d\n", p->buffer_length, session->schema.frame_size, session->schema.frame_duration);
 
 	pa_buffer_attr ba { 0 };
 	ba.maxlength = session->schema.frame_size;
