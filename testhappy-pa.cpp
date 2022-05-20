@@ -44,12 +44,16 @@ bool cb_new_session(sip_session_t *const session)
 	session->private_data = new pa_sessions_t;
 	pa_sessions_t *p = reinterpret_cast<pa_sessions_t *>(session->private_data);
 
+	p->buffer_length    = session->samplerate * session->schema.frame_duration / 1000;
+
+	pa_buffer_attr ba { 0 };
+	ba.maxlength = p->buffer_length;
+	ba.fragsize  = p->buffer_length;
+
 	int error = 0;  // TODO handle errors
-	p->record = pa_simple_new(NULL, "libHappy", PA_STREAM_RECORD,   NULL, "record",   &ss, NULL, NULL, &error);
+	p->record = pa_simple_new(NULL, "libHappy", PA_STREAM_RECORD,   NULL, "record",   &ss, NULL, &ba, &error);
 
 	p->play   = pa_simple_new(NULL, "libHappy", PA_STREAM_PLAYBACK, NULL, "playback", &ss, NULL, NULL, &error);
-
-	p->buffer_length    = session->samplerate * session->schema.frame_duration / 1000;
 
 	p->stop_flag        = &session->stop_flag;
 
@@ -88,6 +92,8 @@ bool cb_send(short **const samples, size_t *const n_samples, sip_session_t *cons
 				int error = 0;  // TODO handle errors
 				pa_simple_read(p->record, buffer, p->buffer_length * sizeof(short), &error);
 
+				printf("latency: %lu\n", pa_simple_get_latency(p->record, &error));
+
 				// update moving average for gain
 				double avg = 0;
 
@@ -106,6 +112,7 @@ bool cb_send(short **const samples, size_t *const n_samples, sip_session_t *cons
 					buffer[i] *= gain;
 
 				std::unique_lock<std::mutex> lck(p->buffer_lock);
+
 				p->buffers.push(buffer);
 
 				p->buffer_cv.notify_all();
@@ -117,6 +124,8 @@ bool cb_send(short **const samples, size_t *const n_samples, sip_session_t *cons
 
 	using namespace std::chrono_literals;
 
+	uint64_t start = get_us();
+
 	while(p->buffers.empty()) {
 		p->buffer_cv.wait_for(lck, 500ms);
 
@@ -126,6 +135,10 @@ bool cb_send(short **const samples, size_t *const n_samples, sip_session_t *cons
 			return false;
 		}
 	}
+
+	uint64_t fin = get_us();
+
+	printf("%lu\n", fin - start);
 
 	*samples   = p->buffers.front();
 	p->buffers.pop();
@@ -179,8 +192,8 @@ int main(int argc, char *argv[])
 	setlog("testhappy.log", debug, debug);
 
 	// remote ip (IP address of upstream asterisk server), my extension-number, my password, my ip, my sip port, samplerate-used-by-callbacks, [callbacks...]
-	// sip s("192.168.64.1", "9999", "1234", "192.168.65.158", 5060, 60, 44100, cb_new_session, cb_recv, cb_send, cb_end_session, cb_dtmf);
-	sip s("10.208.11.13", "3131", "1234", "10.208.42.59", 5060, 60, 44100, cb_new_session, cb_recv, cb_send, cb_end_session, cb_dtmf);
+	sip s("192.168.64.1", "9999", "1234", "192.168.65.158", 5060, 60, 44100, cb_new_session, cb_recv, cb_send, cb_end_session, cb_dtmf);
+	//sip s("10.208.11.13", "3131", "1234", "10.208.42.59", 5060, 60, 44100, cb_new_session, cb_recv, cb_send, cb_end_session, cb_dtmf);
 
 	// do whatever you like here
 	pause();
