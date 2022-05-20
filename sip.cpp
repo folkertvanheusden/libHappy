@@ -652,7 +652,7 @@ bool sip::transmit_audio(const sockaddr_in tgt_addr, sip_session_t *const ss, co
 			delete [] rtpp.first;
 		}
 
-		double sleep = 1000000.0 / (ss->schema.rate / double(cur_n));
+		double sleep = 1000000.0 / (ss->schema.rate / double(cur_n / 8.0));
 		myusleep(sleep);
 	}
 
@@ -718,7 +718,7 @@ void sip::session(const struct sockaddr_in tgt_addr, const int tgt_rtp_port, sip
 	struct sockaddr_in work_addr = tgt_addr;
 	work_addr.sin_port = htons(tgt_rtp_port);
 
-	DOLOG(info, "sip::session: session handler thread started. transmit to %s:%d\n", sockaddr_to_str(work_addr).c_str(), tgt_rtp_port);
+	DOLOG(info, "sip::session: session handler thread started. transmit to %s:%d at rate %d\n", sockaddr_to_str(work_addr).c_str(), tgt_rtp_port, ss->schema.rate);
 
 	std::thread audio_recv_thread([this, ss]() { wait_for_audio(ss); });
 
