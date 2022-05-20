@@ -42,13 +42,13 @@ bool cb_new_session(sip_session_t *const session)
 	printf("cb_new_session, call-id: %s\n", session->call_id.c_str());
 
 	session->private_data = new pa_sessions_t;
-	pa_sessions_t *p = reinterpret_cast<pa_sessions_t *>(session->private_data);
+	pa_sessions_t   *p = reinterpret_cast<pa_sessions_t *>(session->private_data);
 
-	p->buffer_length    = session->samplerate * session->schema.frame_duration / 1000;
+	p->buffer_length   = session->samplerate * session->schema.frame_duration / 1000;
 
 	pa_buffer_attr ba { 0 };
-	ba.maxlength = p->buffer_length;
-	ba.fragsize  = p->buffer_length;
+	ba.maxlength = session->schema.frame_size;
+	ba.fragsize  = session->schema.frame_size;
 
 	int error = 0;  // TODO handle errors
 	p->record = pa_simple_new(NULL, "libHappy", PA_STREAM_RECORD,   NULL, "record",   &ss, NULL, &ba, &error);
