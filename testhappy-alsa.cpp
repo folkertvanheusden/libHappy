@@ -188,9 +188,32 @@ bool cb_new_session(sip_session_t *const session)
 
 // invoked when the peer produces audio and which is then
 // received by us
+			double t_avg = 0;
+
 bool cb_recv(const short *const samples, const size_t n_samples, sip_session_t *const session)
 {
 	alsa_sessions_t *p = reinterpret_cast<alsa_sessions_t *>(session->private_data);
+
+			double  gain_n_samples = 300.0 / session->schema.frame_duration; // calculate fragment over 300ms
+
+			printf("duration: %d, blen: %d\n", session->schema.frame_duration, p->buffer_length);
+
+				// update moving average for gain
+				double avg = 0;
+
+				for(int i=0; i<n_samples; i++)
+					avg += samples[i];
+
+				avg /= p->buffer_length;
+
+				t_avg = (t_avg * gain_n_samples + avg) / (gain_n_samples + 1);
+
+				// apply
+				double gain = std::max(1.5, std::min(5.0, 32767 / std::max(1.0, t_avg)));
+
+				// TODO clamp to -1...1
+				for(int i=0; i<n_samples; i++)
+					((short *)samples)[i] *= gain;
 
 	int err = snd_pcm_writei(p->play_handle, samples, n_samples);
 
@@ -216,12 +239,6 @@ bool cb_send(short **const samples, size_t *const n_samples, sip_session_t *cons
 
 	if (p->rec_th == nullptr) {
 		p->rec_th = new std::thread([p, session]() {
-			double t_avg = 0;
-
-			double  gain_n_samples = 300.0 / session->schema.frame_duration; // calculate fragment over 300ms
-
-			printf("duration: %d, blen: %d\n", session->schema.frame_duration, p->buffer_length);
-
 			while(!*p->stop_flag) {
 				uint64_t start = get_us();
 
@@ -230,23 +247,6 @@ bool cb_send(short **const samples, size_t *const n_samples, sip_session_t *cons
 				int err = snd_pcm_readi(p->capture_handle, buffer, p->buffer_length);
 				if (err < 0)
 					fprintf(stderr, "read %d frames from audio interface failed (%s)\n", p->buffer_length, snd_strerror(err));
-
-				// update moving average for gain
-				double avg = 0;
-
-				for(int i=0; i<p->buffer_length; i++)
-					avg += buffer[i];
-
-				avg /= p->buffer_length;
-
-				t_avg = (t_avg * gain_n_samples + avg) / (gain_n_samples + 1);
-
-				// apply
-				double gain = std::max(1.5, std::min(5.0, 32767 / std::max(1.0, t_avg)));
-
-				// TODO clamp to -1...1
-				for(int i=0; i<p->buffer_length; i++)
-					buffer[i] *= gain;
 
 				std::unique_lock<std::mutex> lck(p->buffer_lock);
 
@@ -334,7 +334,7 @@ int main(int argc, char *argv[])
 
 	// remote ip (IP address of upstream asterisk server), my extension-number, my password, my ip, my sip port, samplerate-used-by-callbacks, [callbacks...]
 	//sip s("192.168.64.1", "9999", "1234", "192.168.65.158", 5060, 60, 44100, cb_new_session, cb_recv, cb_send, cb_end_session, cb_dtmf);
-	sip s("10.208.11.13", "3535", "1234", "10.208.42.97", 5060, 60, 44100, cb_new_session, cb_recv, cb_send, cb_end_session, cb_dtmf);
+	sip s("10.208.11.13", "3131", "1234", "10.208.42.97", 5060, 60, 44100, cb_new_session, cb_recv, cb_send, cb_end_session, cb_dtmf);
 
 	// do whatever you like here
 	pause();
