@@ -3,7 +3,7 @@ what it is
 
 This program allows you to interface to a VOIP/SIP server.
 
-When connected, you will receive incoming calls (only) via callbacks.
+When connected, you will receive audio and dtmf from incoming calls (only) via callbacks.
 
 Via these callbacks you will be notified of new sessions, you will receive audio and can send audio and you will be informed about DTMF key presses.
 
