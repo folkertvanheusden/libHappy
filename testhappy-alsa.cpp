@@ -20,9 +20,11 @@ typedef struct {
 	int          buffer_length;
 	std::queue<short *> buffers;
 
-	snd_pcm_t   *capture_handle; // from pa to voip
+	snd_pcm_t   *capture_handle; // from alsa to voip
 
-	snd_pcm_t   *play_handle;  // from voip to pa
+	double t_avg = 0;
+
+	snd_pcm_t   *play_handle;  // from voip to alsa
 
 	std::atomic_bool *stop_flag;
 } alsa_sessions_t;
@@ -188,32 +190,30 @@ bool cb_new_session(sip_session_t *const session)
 
 // invoked when the peer produces audio and which is then
 // received by us
-			double t_avg = 0;
-
 bool cb_recv(const short *const samples, const size_t n_samples, sip_session_t *const session)
 {
 	alsa_sessions_t *p = reinterpret_cast<alsa_sessions_t *>(session->private_data);
 
-			double  gain_n_samples = 300.0 / session->schema.frame_duration; // calculate fragment over 300ms
+	double  gain_n_samples = 300.0 / session->schema.frame_duration; // calculate fragment over 300ms
 
-			printf("duration: %d, blen: %d\n", session->schema.frame_duration, p->buffer_length);
+	printf("duration: %d, blen: %d\n", session->schema.frame_duration, p->buffer_length);
 
-				// update moving average for gain
-				double avg = 0;
+	// update moving average for gain
+	double avg = 0;
 
-				for(int i=0; i<n_samples; i++)
-					avg += samples[i];
+	for(int i=0; i<n_samples; i++)
+		avg += samples[i];
 
-				avg /= p->buffer_length;
+	avg /= p->buffer_length;
 
-				t_avg = (t_avg * gain_n_samples + avg) / (gain_n_samples + 1);
+	p->t_avg = (p->t_avg * gain_n_samples + avg) / (gain_n_samples + 1);
 
-				// apply
-				double gain = std::max(1.5, std::min(5.0, 32767 / std::max(1.0, t_avg)));
+	// apply
+	double gain = std::max(1.5, std::min(5.0, 32767 / std::max(1.0, p->t_avg)));
 
-				// TODO clamp to -1...1
-				for(int i=0; i<n_samples; i++)
-					((short *)samples)[i] *= gain;
+	// TODO clamp to -1...1
+	for(int i=0; i<n_samples; i++)
+		((short *)samples)[i] *= gain;
 
 	int err = snd_pcm_writei(p->play_handle, samples, n_samples);
 
