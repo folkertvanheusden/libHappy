@@ -28,6 +28,11 @@ add_executable(
   testhappy-pa.cpp
 )
 
+add_executable(
+  testhappy-alsa
+  testhappy-alsa.cpp
+)
+
 set(CMAKE_THREAD_PREFER_PTHREAD TRUE)
 set(THREADS_PREFER_PTHREAD_FLAG TRUE)
 find_package(Threads)
@@ -39,6 +44,8 @@ target_link_libraries(happy atomic)
 target_link_libraries(testhappy happy)
 
 target_link_libraries(testhappy-pulseaudio happy)
+
+target_link_libraries(testhappy-alsa happy)
 
 include(FindPkgConfig)
 
@@ -65,5 +72,10 @@ pkg_check_modules(PA REQUIRED libpulse-simple)
 target_link_libraries(testhappy-pulseaudio ${PA_LIBRARIES})
 target_include_directories(testhappy-pulseaudio PUBLIC ${PA_INCLUDE_DIRS})
 target_compile_options(testhappy-pulseaudio PUBLIC ${PA_CFLAGS_OTHER})
+
+pkg_check_modules(ALSA REQUIRED alsa)
+target_link_libraries(testhappy-alsa ${ALSA_LIBRARIES})
+target_include_directories(testhappy-alsa PUBLIC ${ALSA_INCLUDE_DIRS})
+target_compile_options(testhappy-alsa PUBLIC ${ALSA_CFLAGS_OTHER})
 
 include(FindPkgConfig)
