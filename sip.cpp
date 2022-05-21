@@ -280,11 +280,13 @@ codec_t select_schema(const std::vector<std::string> *const body, const int max_
 	int     frame_duration = 20;
 
 	for(std::string line : *body) {
+		// printf("%s\n", line.c_str());
+
 		if (line.substr(0, 11) == "a=maxptime:") {
-			// 20ms min for sanity
-			frame_duration = std::max(20, atoi(line.substr(11).c_str()));
+			frame_duration = std::min(40, atoi(line.substr(11).c_str()));
 
 			DOLOG(debug, "select_schema: frame duration set to %dms\n", frame_duration);
+
 			continue;
 		}
 
