@@ -81,3 +81,5 @@ install(TARGETS happy
 configure_file(libhappy.pc.in libhappy.pc @ONLY)
 
 install(FILES ${CMAKE_BINARY_DIR}/libhappy.pc DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/pkgconfig)
+
+install(FILES testhappy-alsa.cpp testhappy.cpp README.md LICENSE DESTINATION ${CMAKE_INSTALL_DOCDIR})
