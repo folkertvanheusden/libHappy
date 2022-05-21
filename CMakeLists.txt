@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.7)
 
-project(libhappy)
+project(libhappy VERSION 0.0.1 DESCRIPTION "libHappy - a VOIP/SIP library")
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED True)
@@ -12,11 +12,13 @@ set(CMAKE_INTERPROCEDURAL_OPTIMIZATION_RELEASE TRUE)
 set(CMAKE_BUILD_TYPE Debug)
 
 add_library(
-  happy
+  happy SHARED
   net.cpp
   sip.cpp
   utils.cpp
 )
+
+set_target_properties(happy PROPERTIES VERSION ${PROJECT_VERSION} PUBLIC_HEADER sip.h)
 
 add_executable(
   testhappy
@@ -67,3 +69,15 @@ target_include_directories(testhappy-alsa PUBLIC ${ALSA_INCLUDE_DIRS})
 target_compile_options(testhappy-alsa PUBLIC ${ALSA_CFLAGS_OTHER})
 
 include(FindPkgConfig)
+
+set_target_properties(happy PROPERTIES PUBLIC_HEADER "sip.h;utils.h")
+
+include(GNUInstallDirs)
+
+install(TARGETS happy
+	LIBRARY DESTINATION lib/${PROJECT_NAME}
+	PUBLIC_HEADER DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/${PROJECT_NAME})
+
+configure_file(libhappy.pc.in libhappy.pc @ONLY)
+
+install(FILES ${CMAKE_BINARY_DIR}/libhappy.pc DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/pkgconfig)

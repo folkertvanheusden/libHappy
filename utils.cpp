@@ -22,30 +22,6 @@
 
 #include "utils.h"
 
-void swap_mac(uint8_t *a, uint8_t *b)
-{
-	uint8_t temp[6];
-	memcpy(temp, a, 6);
-	memcpy(a, b, 6);
-	memcpy(b, temp, 6);
-}
-
-void swap_ipv4(uint8_t *a, uint8_t *b)
-{
-	uint8_t temp[4];
-	memcpy(temp, a, 4);
-	memcpy(a, b, 4);
-	memcpy(b, temp, 4);
-}
-
-uint8_t *duplicate(const uint8_t *const in, const size_t size)
-{
-	uint8_t *out = new uint8_t[size];
-	memcpy(out, in, size);
-
-	return out;
-}
-
 std::string myformat(const char *const fmt, ...)
 {
         char *buffer = nullptr;
@@ -221,31 +197,6 @@ void dolog(const log_level_t ll, const char *fmt, ...)
 	free(ts_str);
 }
 
-uint8_t * get_from_buffer(uint8_t **p, size_t *len, size_t get_len)
-{
-	if (get_len > *len)
-		return nullptr;
-
-	uint8_t *out = (uint8_t *)malloc(get_len);
-	memcpy(out, &(*p)[0], get_len);
-
-	size_t left = *len - get_len;
-
-	if (left) {
-		memmove(&(*p)[0], &(*p)[get_len], left);
-		*len -= get_len;
-		assert(*len == left);
-	}
-	else {
-		*len = 0;
-
-		free(*p);
-		*p = nullptr;
-	}
-
-	return out;
-}
-
 void set_thread_name(std::string name)
 {
 	if (name.length() > 15)
@@ -254,33 +205,6 @@ void set_thread_name(std::string name)
 	DOLOG(debug, "Set name of thread %d to \"%s\"\n", gettid(), name.c_str());
 
 	pthread_setname_np(pthread_self(), name.c_str());
-}
-
-std::string bin_to_text(const uint8_t *p, const size_t len)
-{
-	char *temp = (char *)calloc(1, len * 6 + 1);
-
-	for(size_t i=0; i<len; i++)
-		// snprintf(&temp[i * 6], 7, "%c[%02x] ", p[i] > 32 && p[i] < 127 ? p[i] : '.', p[i]);
-		snprintf(&temp[i * 3], 7, "%s%02x", i ? " " : "", p[i]);
-
-	std::string out = temp;
-
-	free(temp);
-
-	return out;
-}
-
-bool file_exists(const std::string & file, size_t *const file_size)
-{
-	struct stat st { 0 };
-
-	bool rc = stat(file.c_str(), &st) == 0;
-
-	if (rc && file_size)
-		*file_size = st.st_size;
-
-	return rc;
 }
 
 void myusleep(uint64_t us)
@@ -367,58 +291,6 @@ std::string replace(std::string target, const std::string & what, const std::str
 	}
 
 	return target;
-}
-
-void run(const std::string & what)
-{
-	pid_t pid = fork();
-
-	if (pid == 0)
-		exit(system(what.c_str()));
-
-	else if (pid == -1)
-		DOLOG(ll_error, "Failed invoking \"%s\"", what.c_str());
-}
-
-uint64_t MurmurHash64A(const void *const key, const int len, const uint64_t seed)
-{
-	const uint64_t m = 0xc6a4a7935bd1e995LLU;
-	const int r = 47;
-
-	uint64_t h = seed ^ (len * m);
-
-	const uint64_t *data = (const uint64_t *)key;
-	const uint64_t *end = (len >> 3) + data;
-
-	while(data != end) {
-		uint64_t k = *data++;
-
-		k *= m;
-		k ^= k >> r;
-		k *= m;
-
-		h ^= k;
-		h *= m;
-	}
-
-	const uint8_t *data2 = (const uint8_t *)data;
-
-	switch(len & 7) {
-		case 7: h ^= (uint64_t)(data2[6]) << 48;
-		case 6: h ^= (uint64_t)(data2[5]) << 40;
-		case 5: h ^= (uint64_t)(data2[4]) << 32;
-		case 4: h ^= (uint64_t)(data2[3]) << 24;
-		case 3: h ^= (uint64_t)(data2[2]) << 16;
-		case 2: h ^= (uint64_t)(data2[1]) << 8;
-		case 1: h ^= (uint64_t)(data2[0]);
-			h *= m;
-	};
-
-	h ^= h >> r;
-	h *= m;
-	h ^= h >> r;
-
-	return h;
 }
 
 void error_exit(const bool se, const char *format, ...)
