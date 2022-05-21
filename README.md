@@ -27,6 +27,12 @@ cmake install
 ... will install the library and a .pc-file (for pkg-config).
 
 
+demo
+----
+
+Call +31317794512. Then in the main menu press '2' and in the second menu press '7'. You will/should hear music playing and if so, you can talk which will be heard by the people playing the music.
+
+
 usage
 -----
 See testhappy[-alsa].cpp for examples how to use the library in your own program.
