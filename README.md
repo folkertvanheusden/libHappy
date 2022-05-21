@@ -7,8 +7,8 @@ required packages:
 * libspeex-dev
 * libssl-dev
 
-for the pulse audio test program:
-* libpulse-dev
+for the alsa test program:
+* libasound2-dev
 
 You need 'cmake' (and 'build-essentials' on debian/ubuntu) to build the library/test programs.
 
