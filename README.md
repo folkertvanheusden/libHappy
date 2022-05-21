@@ -12,6 +12,10 @@ for the alsa test program:
 
 You need 'cmake' (and 'build-essentials' on debian/ubuntu) to build the library/test programs.
 
+cmake install
+
+... will install the library and a .pc-file (for pkg-config).
+
 
 This library has been tested with the Asterisk VOIP server application.
 
