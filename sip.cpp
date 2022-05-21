@@ -691,8 +691,7 @@ void sip::wait_for_audio(sip_session_t *const ss)
 				      	// 101 is statically assigned (in this library) to "telephone-event" rtp-type
 					dolog(debug, "TELEPHONE EVENT %d, %02x\n", buffer[12], buffer[13]);
 
-					if (buffer[13] & 128)  // end of dtmf
-						dtmf_callback(buffer[12], ss);
+					dtmf_callback(buffer[12], ss);
 				}
 				else {
 					audio_input(buffer, rc, ss);
