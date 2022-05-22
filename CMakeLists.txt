@@ -55,10 +55,6 @@ target_link_libraries(happy ${SNDFILE_LIBRARIES})
 target_include_directories(happy PUBLIC ${SNDFILE_INCLUDE_DIRS})
 target_compile_options(happy PUBLIC ${SNDFILE_CFLAGS_OTHER})
 
-find_package(OpenSSL REQUIRED)
-target_include_directories(happy PUBLIC ${OPENSSL_INCLUDE_DIR})
-target_link_libraries(happy OpenSSL::SSL OpenSSL::Crypto)
-
 pkg_check_modules(ALSA REQUIRED alsa)
 target_link_libraries(testhappy-alsa ${ALSA_LIBRARIES})
 target_include_directories(testhappy-alsa PUBLIC ${ALSA_INCLUDE_DIRS})
