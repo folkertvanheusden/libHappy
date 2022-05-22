@@ -10,7 +10,6 @@
 #include <thread>
 #include <vector>
 #include <netinet/in.h>
-#include <speex/speex.h>
 
 // not strictly required here but as a convenience for users
 // of this library (only need to include this file)
@@ -28,12 +27,6 @@ typedef struct {
 	int         frame_size;
 	int         frame_duration;
 } codec_t;
-
-typedef struct {
-	void     *state;
-
-	SpeexBits bits;
-} speex_t;
 
 typedef struct _sip_session_ {
 	// data for library itself
@@ -54,9 +47,6 @@ typedef struct _sip_session_ {
 	int                audio_port   { 0 };
 	int                fd           { -1 };
 
-	speex_t            spx_in       { 0 };
-	speex_t            spx_out      { 0 };
-
 	// callback data
 	std::string        call_id;
 
@@ -73,12 +63,6 @@ typedef struct _sip_session_ {
 	virtual ~_sip_session_() {
 		src_delete(audio_in_resample);
 		src_delete(audio_out_resample);
-
-		// speex_encoder_destroy(spx_in.state);
-		// speex_encoder_destroy(spx_out.state);
-
-		speex_bits_destroy(&spx_in.bits);
-		speex_bits_destroy(&spx_out.bits);
 
 		close(fd);
 	}

@@ -7,7 +7,6 @@
 #include <stdint.h>
 #include <unistd.h>
 #include <arpa/inet.h>
-#include <speex/speex.h>
 #include <sys/time.h>
 
 #include "md5.h"
@@ -15,8 +14,6 @@
 #include "sip.h"
 #include "utils.h"
 
-
-constexpr bool allow_speex    = false;
 
 static void resample(SRC_STATE *const state, const short *const in, const int in_rate, const int n_samples, short **const out, const int out_rate, int *const out_n_samples)
 {
@@ -258,7 +255,6 @@ void sip::reply_to_OPTIONS(const sockaddr_in *const a, const int fd, const std::
 	content.push_back("a=sendrecv");
 	content.push_back(myformat("a=rtpmap:8 PCMA/%u", samplerate));
 	content.push_back(myformat("a=rtpmap:11 L16/%u", samplerate));
-	content.push_back(myformat("a=rtpmap:97 speex/%u", samplerate));
 	content.push_back(myformat("a=rtpmap:101 telephone-event/%u", samplerate));
 	content.push_back("a=fmtp:97 mode=\"1,any\";vbr=on");
 
@@ -313,20 +309,18 @@ codec_t select_schema(const std::vector<std::string> *const body, const int max_
 
 		bool pick = false;
 
-		if (rate >= best.rate && (name == "l16" || name.substr(0, 5) == "speex" || name == "alaw" || name == "pcma")) {
+		if (rate >= best.rate && (name == "l16" || name == "alaw" || name == "pcma")) {
 			if (abs(rate - max_rate) < abs(rate - best.rate) || best.rate == -1)
 				pick = true;
 		}
 		else if (rate == best.rate) {
 			if (name == "l16")
 				pick = true;
-			else if (name != "l16" && name.substr(0, 5) == "speex")
-				pick = true;
 			else if (best.id == 255)
 				pick = true;
 		}
 
-		if (pick && (allow_speex || name.substr(0, 5) != "speex")) {
+		if (pick) {
 			best.rate = rate;
 			best.id = id;
 			best.name = name;
@@ -343,18 +337,9 @@ codec_t select_schema(const std::vector<std::string> *const body, const int max_
 		best.rate     = 8000;
 	}
 
-	if (best.name.substr(0, 5) == "speex") {
-		void *enc_state = speex_encoder_init(&speex_nb_mode);
-		speex_encoder_ctl(enc_state, SPEEX_GET_FRAME_SIZE, &best.frame_size);
-		speex_encoder_destroy(enc_state);
-
-		// TODO best.frame_duration
-	}
-	else {
-		// usually 20ms
-		best.frame_size     = best.rate * frame_duration / 1000;
-		best.frame_duration = frame_duration;
-	}
+	// usually 20ms
+	best.frame_size     = best.rate * frame_duration / 1000;
+	best.frame_duration = frame_duration;
 
 	DOLOG(info, "SIP: CODEC chosen: %s/%d (id: %u), frame size: %d\n", best.name.c_str(), best.rate, best.id, best.frame_size);
 
@@ -405,29 +390,9 @@ void sip::reply_to_INVITE(const sockaddr_in *const a, const int fd, const std::v
 			ss->audio_out_resample = src_new(SRC_SINC_BEST_QUALITY, 1, &dummy);  // TODO error checking
 			src_set_ratio(ss->audio_out_resample, schema.rate / double(samplerate));  // TODO error checking
 
-			// init speex
-			// OUT
-			speex_bits_init(&ss->spx_out.bits);
-
-			ss->spx_out.state = speex_encoder_init(&speex_nb_mode);
-
-			int tmp = 10;
-			speex_encoder_ctl(ss->spx_out.state, SPEEX_SET_QUALITY, &tmp);
-
-			speex_encoder_ctl(ss->spx_out.state, SPEEX_SET_SAMPLING_RATE, &schema.rate);
-
-			// IN
-			speex_bits_init(&ss->spx_in.bits);
-			ss->spx_in.state = speex_decoder_init(&speex_nb_mode);
-
-			speex_encoder_ctl(ss->spx_in.state, SPEEX_SET_SAMPLING_RATE, (void *)&samplerate);
-
 			content.push_back("a=sendrecv");
 			content.push_back(myformat("a=rtpmap:%u %s/%u", schema.id, schema.org_name.c_str(), schema.rate));
 
-			if (schema.name.substr(0, 5) == "speex")
-				content.push_back(myformat("a=fmtp:%u mode=\"1,any\";vbr=on", schema.id));
-			
 			content.push_back(myformat("m=audio %d RTP/AVP %u", ss->audio_port, schema.id));
 
 			std::string content_out = merge(content, "\r\n");
@@ -531,7 +496,7 @@ void sip::reply_to_UNAUTHORIZED(const sockaddr_in *const a, const int fd, const 
 	send_REGISTER(call_id_str, authorize);
 }
 
-static std::pair<uint8_t *, int> create_rtp_packet(const uint32_t ssrc, const uint16_t seq_nr, const uint32_t t, const codec_t & schema, const short *const samples, const int n_samples, speex_t *const spx)
+static std::pair<uint8_t *, int> create_rtp_packet(const uint32_t ssrc, const uint16_t seq_nr, const uint32_t t, const codec_t & schema, const short *const samples, const int n_samples)
 {
 	int sample_size = 0;
 
@@ -539,15 +504,13 @@ static std::pair<uint8_t *, int> create_rtp_packet(const uint32_t ssrc, const ui
 		sample_size = sizeof(uint8_t);
 	else if (schema.name == "l16")	// l16 mono
 		sample_size = sizeof(uint16_t);
-	else if (schema.name.substr(0, 5) == "speex")	// speex
-		sample_size = sizeof(uint8_t);
 	else {
 		DOLOG(ll_error, "SIP: Invalid rtp payload schema %s/%d\n", schema.name.c_str(), schema.rate);
 		return { nullptr, 0 };
 	}
 
 	size_t size = 3 * 4 + n_samples * sample_size;
-	uint8_t *rtp_packet = new uint8_t[size * 2](); // *2 for speex (is this required?)
+	uint8_t *rtp_packet = new uint8_t[size]();
 
 	rtp_packet[0] |= 128;  // v2
 	rtp_packet[1] = schema.id;
@@ -571,26 +534,6 @@ static std::pair<uint8_t *, int> create_rtp_packet(const uint32_t ssrc, const ui
 			rtp_packet[12 + i * 2 + 0] = samples[i] >> 8;
 			rtp_packet[12 + i * 2 + 1] = samples[i];
 		}
-	}
-	else if (schema.name.substr(0, 5) == "speex") { // speex
-		// is this required?
-		short *input = new short[n_samples];
-		memcpy(input, samples, n_samples * sizeof(short));
-
-		speex_bits_reset(&spx->bits);
-		speex_encode_int(spx->state, input, &spx->bits);
-
-		size_t new_size = 12 + speex_bits_write(&spx->bits, (char *)&rtp_packet[12], size - 12);
-
-		delete [] input;
-
-		if (new_size > size) {
-			DOLOG(ll_error, "SIP: speex decoded data too big (%ld > %ld)\n", new_size, size);
-			delete [] rtp_packet;
-			return { nullptr, 0 };
-		}
-
-		size = new_size;
 	}
 
 	return { rtp_packet, size };
@@ -638,7 +581,7 @@ bool sip::transmit_audio(const sockaddr_in tgt_addr, sip_session_t *const ss, co
 	while(n_audio > 0 && !stop_flag && !ss->stop_flag) {
 		int cur_n = std::min(n_audio, ss->schema.frame_size);
 
-		auto rtpp = create_rtp_packet(ssrc, *seq_nr, *t, ss->schema, &(resampled ? audio : audio_in)[offset], cur_n, &ss->spx_out);
+		auto rtpp = create_rtp_packet(ssrc, *seq_nr, *t, ss->schema, &(resampled ? audio : audio_in)[offset], cur_n);
 
 		offset  += cur_n;
 		n_audio -= cur_n;
@@ -832,28 +775,6 @@ void sip::audio_input(const uint8_t *const payload, const size_t payload_size, s
 
 			delete [] result;
 		}
-	}
-	else if (ss->schema.name.substr(0, 5) == "speex") { // speex
-		speex_bits_read_from(&ss->spx_in.bits, (char *)&payload[12], payload_size - 12);
-
-		// TODO: not just the size of the packet?
-		int frame_size = 0;
-		speex_decoder_ctl(ss->spx_in.state, SPEEX_GET_FRAME_SIZE, &frame_size);
-
-		speex_bits_reset(&ss->spx_in.bits);
-
-		short *of = new short[frame_size];
-		speex_decode_int(ss->spx_in.state, &ss->spx_in.bits, of);
-
-		short *result   = nullptr;
-		int    result_n = 0;
-		resample(ss->audio_in_resample, of, ss->schema.rate, frame_size, &result, samplerate, &result_n);
-
-		recv_callback(result, result_n, ss);
-
-		delete [] result;
-
-		delete [] of;
 	}
 	else {
 		DOLOG(warning, "SIP: unsupported incoming schema %s/%d\n", ss->schema.name.c_str(), ss->schema.rate);

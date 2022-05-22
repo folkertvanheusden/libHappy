@@ -14,7 +14,6 @@ compiling the library
 required packages:
 * libsamplerate0-dev
 * libsndfile1-dev
-* libspeex-dev
 
 for the alsa test program:
 * libasound2-dev
