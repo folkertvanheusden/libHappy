@@ -52,35 +52,22 @@ uint64_t get_ms()
 	struct timespec ts { 0, 0 };
 
 	if (clock_gettime(CLOCK_REALTIME, &ts) == -1)
-		fprintf(stderr, "clock_gettime failed: %s\n", strerror(errno));
+		error_exit(true, "clock_gettime failed");
 
 	return uint64_t(ts.tv_sec) * uint64_t(1000) + uint64_t(ts.tv_nsec / 1000000);
 }
 
 void get_random(uint8_t *tgt, size_t n)
 {
-	int fd = open("/dev/urandom", O_RDONLY);
-	if (fd == -1) {
-		DOLOG(ll_error, "open(\"/dev/urandom\"): %s", strerror(errno));
-		exit(1);
-	}
-
 	while(n > 0) {
-		int rc = read(fd, tgt, n);
+		size_t cur_n = std::min(n, size_t(256));
 
-		if (rc == -1) {
-			if (errno == EINTR)
-				continue;
+		if (getentropy(tgt, cur_n) == -1)
+			error_exit(true, "getentropy() failed");
 
-			DOLOG(ll_error, "read(\"/dev/urandom\"): %s", strerror(errno));
-			exit(1);
-		}
-
-		tgt += rc;
-		n -= rc;
+		tgt += cur_n;
+		n   -= cur_n;
 	}
-
-	close(fd);
 }
 
 std::vector<std::string> split(std::string in, std::string splitter)
@@ -113,11 +100,12 @@ std::vector<std::string> split(std::string in, std::string splitter)
 	return out;
 }
 
-static const char *logfile = strdup("/tmp/myip.log");
-log_level_t log_level_file = warning;
-log_level_t log_level_screen = warning;
-static FILE *lfh = nullptr;
-static int lf_uid = 0, lf_gid = 0;
+static const char *logfile          = strdup("/tmp/myip.log");
+log_level_t        log_level_file   = warning;
+log_level_t        log_level_screen = warning;
+static FILE       *lfh              = nullptr;
+static int         lf_uid           = -1;
+static int         lf_gid           = -1;
 
 void setlog(const char *lf, const log_level_t ll_file, const log_level_t ll_screen)
 {
@@ -151,18 +139,14 @@ void dolog(const log_level_t ll, const char *fmt, ...)
 
 	if (!lfh) {
 		lfh = fopen(logfile, "a+");
-		if (!lfh) {
-			fprintf(stderr, "Cannot access log-file %s: %s\n", logfile, strerror(errno));
-			exit(1);
-		}
+		if (!lfh)
+			error_exit(true, "Cannot access log-file %s", logfile);
 
-		if (fchown(fileno(lfh), lf_uid, lf_gid) == -1)
-			fprintf(stderr, "Cannot change logfile (%s) ownership: %s\n", logfile, strerror(errno));
+		if (lf_uid != -1 && fchown(fileno(lfh), lf_uid, lf_gid) == -1)
+			error_exit(true, "Cannot change logfile (%s) ownership", logfile);
 
-		if (fcntl(fileno(lfh), F_SETFD, FD_CLOEXEC) == -1) {
-			fprintf(stderr, "fcntl(FD_CLOEXEC): %s\n", strerror(errno));
-			exit(1);
-		}
+		if (fcntl(fileno(lfh), F_SETFD, FD_CLOEXEC) == -1)
+			error_exit(true, "fcntl(FD_CLOEXEC) failed");
 	}
 
 	uint64_t now = get_us();
@@ -170,7 +154,7 @@ void dolog(const log_level_t ll, const char *fmt, ...)
 
 	struct tm tm { 0 };
 	if (!localtime_r(&t_now, &tm))
-		fprintf(stderr, "localtime_r: %s\n", strerror(errno));
+		error_exit(true, "localtime_r failed");
 
 	char *ts_str = nullptr;
 
@@ -218,8 +202,12 @@ void myusleep(uint64_t us)
 		struct timespec rem { 0, 0 };
 
 		int rc = nanosleep(&req, &rem);
-		if (rc == 0 || (rc == -1 && errno != EINTR))
+		if (rc == 0 || (rc == -1 && errno != EINTR)) {
+			if (rc == -1)
+				error_exit(true, "nanosleep failed");
+
 			break;
+		}
 
 		memcpy(&req, &rem, sizeof(struct timespec));
 	}
