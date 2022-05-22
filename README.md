@@ -15,7 +15,6 @@ required packages:
 * libsamplerate0-dev
 * libsndfile1-dev
 * libspeex-dev
-* libssl-dev
 
 for the alsa test program:
 * libasound2-dev

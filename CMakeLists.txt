@@ -13,6 +13,7 @@ set(CMAKE_BUILD_TYPE Debug)
 
 add_library(
   happy SHARED
+  md5.cpp
   net.cpp
   sip.cpp
   utils.cpp
