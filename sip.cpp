@@ -116,21 +116,21 @@ void sip::sip_listener()
 	struct pollfd fds[] { { sip_fd, POLLIN, 0 } };
 
 	for(;!stop_flag;) {
-		uint8_t buffer[1600] { 0 };
-
 		int rc = poll(fds, 1, 500);
 
 		if (rc == -1)
 			break;
 
 		if (rc == 1) {
-			sockaddr_in addr     { 0 };
-			socklen_t   addr_len { sizeof addr };
+			uint8_t     buffer[1600] { 0 };
 
-			ssize_t rc = recvfrom(sip_fd, buffer, sizeof buffer, 0, reinterpret_cast<struct sockaddr *>(&addr), &addr_len);
+			sockaddr_in addr         { 0 };
+			socklen_t   addr_len     { sizeof addr };
 
-			if (rc > 0)
-				sip_input(&addr, sip_fd, buffer, rc);
+			ssize_t recv_rc = recvfrom(sip_fd, buffer, sizeof buffer, 0, reinterpret_cast<struct sockaddr *>(&addr), &addr_len);
+
+			if (recv_rc > 0)
+				sip_input(&addr, sip_fd, buffer, recv_rc);
 		}
 	}
 }
@@ -675,20 +675,20 @@ void sip::wait_for_audio(sip_session_t *const ss)
 	struct pollfd fds[] { { ss->fd, POLLIN, 0 } };
 
 	for(;!stop_flag && !ss->stop_flag;) {
-		uint8_t buffer[1600] { 0 };
-
 		int rc = poll(fds, 1, 500);
 
 		if (rc == -1)
 			break;
 
 		if (rc == 1) {
-			sockaddr_in addr     { 0 };
-			socklen_t   addr_len { sizeof addr };
+			uint8_t     buffer[1600] { 0 };
 
-			ssize_t rc = recvfrom(ss->fd, buffer, sizeof buffer, 0, reinterpret_cast<struct sockaddr *>(&addr), &addr_len);
+			sockaddr_in addr         { 0 };
+			socklen_t   addr_len     { sizeof addr };
 
-			if (rc > 0) {
+			ssize_t recv_rc = recvfrom(ss->fd, buffer, sizeof buffer, 0, reinterpret_cast<struct sockaddr *>(&addr), &addr_len);
+
+			if (recv_rc > 0) {
 				if ((buffer[1] & 127) == 101) {
 				      	// 101 is statically assigned (in this library) to "telephone-event" rtp-type
 					dolog(debug, "TELEPHONE EVENT %d, %02x\n", buffer[12], buffer[13]);
@@ -696,7 +696,7 @@ void sip::wait_for_audio(sip_session_t *const ss)
 					dtmf_callback(buffer[12], !!(buffer[13] & 128), buffer[13] & 63, ss);
 				}
 				else {
-					audio_input(buffer, rc, ss);
+					audio_input(buffer, recv_rc, ss);
 				}
 			}
 		}
