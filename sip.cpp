@@ -619,23 +619,25 @@ void sip::send_BYE(const sockaddr_in *const a, const int fd, const std::vector<s
 
 bool sip::transmit_audio(const sockaddr_in tgt_addr, sip_session_t *const ss, const short *const audio_in, const int n_audio_in, uint16_t *const seq_nr, uint32_t *const t, const uint32_t ssrc)
 {
-	int offset = 0;
+	int    offset    = 0;
 
-	int    n_audio = 0;
-	short *audio   = nullptr;
+	int    n_audio   = 0;
+	short *audio     = nullptr;
 
-	if (samplerate == ss->schema.rate) {
+	bool   resampled = false;
+
+	if (samplerate == ss->schema.rate)
 		n_audio = n_audio_in;
-		audio   = (short *)audio_in;  // FIXME
-	}
 	else {
 		resample(ss->audio_out_resample, audio_in, samplerate, n_audio_in, &audio, ss->schema.rate, &n_audio);
+
+		resampled = true;
 	}
 
 	while(n_audio > 0 && !stop_flag && !ss->stop_flag) {
 		int cur_n = std::min(n_audio, ss->schema.frame_size);
 
-		auto rtpp = create_rtp_packet(ssrc, *seq_nr, *t, ss->schema, &audio[offset], cur_n, &ss->spx_out);
+		auto rtpp = create_rtp_packet(ssrc, *seq_nr, *t, ss->schema, &(resampled ? audio : audio_in)[offset], cur_n, &ss->spx_out);
 
 		offset  += cur_n;
 		n_audio -= cur_n;
@@ -658,7 +660,7 @@ bool sip::transmit_audio(const sockaddr_in tgt_addr, sip_session_t *const ss, co
 		myusleep(sleep);
 	}
 
-	if (samplerate != ss->schema.rate)
+	if (resampled)
 		delete [] audio;
 
 	return true;
