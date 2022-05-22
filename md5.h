@@ -88,3 +88,5 @@ class MD5
 };
 
 std::string md5(const std::string str);
+
+#define MD5_DIGEST_LENGTH 16

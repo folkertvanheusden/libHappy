@@ -201,7 +201,7 @@ bool cb_recv(const short *const samples, const size_t n_samples, sip_session_t *
 	// update moving average for gain
 	double avg = 0;
 
-	for(int i=0; i<n_samples; i++)
+	for(size_t i=0; i<n_samples; i++)
 		avg += samples[i];
 
 	avg /= p->buffer_length;
@@ -212,7 +212,7 @@ bool cb_recv(const short *const samples, const size_t n_samples, sip_session_t *
 	double gain = std::max(1.5, std::min(5.0, 32767 / std::max(1.0, p->t_avg)));
 
 	// TODO clamp to -1...1
-	for(int i=0; i<n_samples; i++)
+	for(size_t i=0; i<n_samples; i++)
 		((short *)samples)[i] *= gain;
 
 	int err = snd_pcm_writei(p->play_handle, samples, n_samples);
@@ -333,8 +333,8 @@ int main(int argc, char *argv[])
 	setlog("testhappy.log", debug, debug);
 
 	// remote ip (IP address of upstream asterisk server), my extension-number, my password, my ip, my sip port, samplerate-used-by-callbacks, [callbacks...]
-	//sip s("192.168.64.1", "9999", "1234", "192.168.65.158", 5060, 60, 44100, cb_new_session, cb_recv, cb_send, cb_end_session, cb_dtmf);
-	sip s("10.208.11.13", "3535", "1234", "10.208.42.97", 5060, 60, 44100, cb_new_session, cb_recv, cb_send, cb_end_session, cb_dtmf);
+	sip s("192.168.64.1", "9999", "1234", "192.168.65.158", 5060, 60, 44100, cb_new_session, cb_recv, cb_send, cb_end_session, cb_dtmf);
+	//sip s("10.208.11.13", "3535", "1234", "10.208.42.97", 5060, 60, 44100, cb_new_session, cb_recv, cb_send, cb_end_session, cb_dtmf);
 
 	// do whatever you like here
 	pause();
