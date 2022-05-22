@@ -11,7 +11,6 @@
 #include <time.h>
 #include <unistd.h>
 #include <vector>
-#include <openssl/md5.h>
 #include <sys/stat.h>
 #include <sys/time.h>
 #include <sys/types.h>
@@ -247,19 +246,6 @@ std::string merge(const std::vector<std::string> & in, const std::string & seper
 		out += l + seperator;
 
 	return out;
-}
-
-std::string md5hex(const std::string & in)
-{
-	unsigned char result[MD5_DIGEST_LENGTH];
-
-	MD5((unsigned char *)in.c_str(), in.size(), result);
-
-	std::string rc;
-	for(int i=0; i<MD5_DIGEST_LENGTH; i++)
-		rc += myformat("%02x", result[i]);
-
-	return rc;
 }
 
 std::string replace(std::string target, const std::string & what, const std::string & by_what)

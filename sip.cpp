@@ -10,6 +10,7 @@
 #include <speex/speex.h>
 #include <sys/time.h>
 
+#include "md5.h"
 #include "net.h"
 #include "sip.h"
 #include "utils.h"
@@ -518,10 +519,10 @@ void sip::reply_to_UNAUTHORIZED(const sockaddr_in *const a, const int fd, const 
 	if (str_nonce.has_value())
 		nonce = replace(str_nonce.value(), "\"", "");
 
-	std::string a1 = md5hex(username + ":" + realm + ":" + password);
-	std::string a2 = md5hex("REGISTER:sip:" + myip);
+	std::string a1 = md5(username + ":" + realm + ":" + password);
+	std::string a2 = md5("REGISTER:sip:" + myip);
 
-	std::string digest = md5hex(a1 + ":" + nonce + ":" + a2);
+	std::string digest = md5(a1 + ":" + nonce + ":" + a2);
 
 	std::string authorize = "Authorization: Digest username=\"" + username + "\",realm=\"" + realm + "\",nonce=\"" + nonce + "\",uri=\"sip:" + myip + "\",algorithm=MD5,response=\"" + digest + "\"";
 
