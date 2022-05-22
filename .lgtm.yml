@@ -4,7 +4,6 @@ extraction:
       packages:
         - libsamplerate0-dev
         - libsndfile1-dev
-        - libspeex-dev
         - libasound2-dev
     configure:
       command:
