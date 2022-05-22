@@ -81,7 +81,7 @@ sip::sip(const std::string & upstream_sip_server, const std::string & upstream_s
 		std::function<bool(const short *const samples, const size_t n_samples, sip_session_t *const session)> recv_callback,
 		std::function<bool(short **const samples, size_t *const n_samples, sip_session_t *const session)> send_callback,
 		std::function<void(sip_session_t *const session)> end_session_callback,
-		std::function<void(const uint8_t dtmf_code, sip_session_t *const session)> dtmf_callback) :
+		std::function<void(const uint8_t dtmf_code, const bool is_end, const uint8_t volume, sip_session_t *const session)> dtmf_callback) :
 	upstream_server(upstream_sip_server), username(upstream_sip_user), password(upstream_sip_password),
 	myip(myip), myport(myport),
 	interval(sip_register_interval),
@@ -691,7 +691,7 @@ void sip::wait_for_audio(sip_session_t *const ss)
 				      	// 101 is statically assigned (in this library) to "telephone-event" rtp-type
 					dolog(debug, "TELEPHONE EVENT %d, %02x\n", buffer[12], buffer[13]);
 
-					dtmf_callback(buffer[12], ss);
+					dtmf_callback(buffer[12], !!(buffer[13] & 128), buffer[13] & 63, ss);
 				}
 				else {
 					audio_input(buffer, rc, ss);

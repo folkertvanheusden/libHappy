@@ -115,7 +115,7 @@ private:
 	std::function<void(sip_session_t *const session)> end_session_callback;
 
 	// called when a DTMF event has been received
-	std::function<void(const uint8_t code, sip_session_t *const session)> dtmf_callback;
+	std::function<void(const uint8_t code, const bool is_end, const uint8_t volume, sip_session_t *const session)> dtmf_callback;
 
 	std::thread *th1 { nullptr };
 	std::thread *th2 { nullptr };
@@ -163,7 +163,7 @@ public:
 		std::function<bool(const short *const samples, const size_t n_samples, sip_session_t *const session)> recv_callback,
 		std::function<bool(short **const samples, size_t *const n_samples, sip_session_t *const session)> send_callback,
 		std::function<void(sip_session_t *const session)> end_session_callback,
-		std::function<void(const uint8_t dtmf_code, sip_session_t *const session)> dtmf_callback);
+		std::function<void(const uint8_t dtmf_code, const bool is_end, const uint8_t volume, sip_session_t *const session)> dtmf_callback);
 
 	virtual ~sip();
 };

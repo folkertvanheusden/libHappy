@@ -315,7 +315,7 @@ void cb_end_session(sip_session_t *const session)
 	delete p;
 }
 
-void cb_dtmf(const uint8_t dtmf_code, sip_session_t *const session)
+void cb_dtmf(const uint8_t dtmf_code, const bool is_end, const uint8_t volume, sip_session_t *const session)
 {
 	printf("DTMF pressed: %d\n", dtmf_code);
 }
@@ -334,7 +334,7 @@ int main(int argc, char *argv[])
 
 	// remote ip (IP address of upstream asterisk server), my extension-number, my password, my ip, my sip port, samplerate-used-by-callbacks, [callbacks...]
 	//sip s("192.168.64.1", "9999", "1234", "192.168.65.158", 5060, 60, 44100, cb_new_session, cb_recv, cb_send, cb_end_session, cb_dtmf);
-	sip s("10.208.11.13", "3131", "1234", "10.208.42.97", 5060, 60, 44100, cb_new_session, cb_recv, cb_send, cb_end_session, cb_dtmf);
+	sip s("10.208.11.13", "3535", "1234", "10.208.42.97", 5060, 60, 44100, cb_new_session, cb_recv, cb_send, cb_end_session, cb_dtmf);
 
 	// do whatever you like here
 	pause();

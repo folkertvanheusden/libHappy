@@ -68,7 +68,7 @@ The last 5 parameters are pointers to the callback functions:
 * void end\_session(sip\_session\_t \*const session)
   Called when the session is terminated by the other end.
 
-* void dtmf(const uint8\_t dtmf\_code, sip\_session\_t \*const session)
+* void dtmf(const uint8\_t dtmf\_code, const bool is\_end, const uint8\_t volume, sip\_session\_t \*const session)
   Called when a DTMF code is received. This can come in multiple times, depending on how long someone keeps the button on the phone pressed.
 
 
