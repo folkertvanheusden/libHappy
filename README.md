@@ -44,7 +44,7 @@ You instantiate the 'sip' class with the following parameters
 * upstream SIP server user: username of the SIP account you want to use
 * upstream SIP server password: password of the SIP account you want to use
 
-* local IP address: this is required unfortunately for the RTP protocol used during audio exchange
+* local IP address: this is only required if there is a NAT router between libhappy and the target sip-server or when the local IP address cannot automatically be determined
 
 * local port: UDP port on which the library will listen for incoming SIP packets 
 

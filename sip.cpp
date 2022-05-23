@@ -73,7 +73,7 @@ static int8_t encode_alaw(int16_t number)
 }
 
 sip::sip(const std::string & upstream_sip_server, const std::string & upstream_sip_user, const std::string & upstream_sip_password,
-		const std::string & myip, const int myport,
+		const std::optional<std::string> & myip, const int myport,
 		const int sip_register_interval, const int samplerate,
 		std::function<bool(sip_session_t *const session)> new_session_callback,
 		std::function<bool(const short *const samples, const size_t n_samples, sip_session_t *const session)> recv_callback,
@@ -81,11 +81,24 @@ sip::sip(const std::string & upstream_sip_server, const std::string & upstream_s
 		std::function<void(sip_session_t *const session)> end_session_callback,
 		std::function<void(const uint8_t dtmf_code, const bool is_end, const uint8_t volume, sip_session_t *const session)> dtmf_callback) :
 	upstream_server(upstream_sip_server), username(upstream_sip_user), password(upstream_sip_password),
-	myip(myip), myport(myport),
+	myport(myport),
 	interval(sip_register_interval),
 	samplerate(samplerate),
 	new_session_callback(new_session_callback), recv_callback(recv_callback), send_callback(send_callback), end_session_callback(end_session_callback), dtmf_callback(dtmf_callback)
 {
+	if (myip.has_value())
+		this->myip = myip.value();
+	else {
+		auto interface = find_interface_for(upstream_sip_server);
+
+		if (!interface.has_value())
+			error_exit(false, "Cannot find local IP address to reach \"%s\"", upstream_sip_server.c_str());
+
+		this->myip = sockaddr_to_str(interface.value());
+
+		DOLOG(debug, "Local IP address: %s\n", this->myip.c_str());
+	}
+
 	th1 = new std::thread(&sip::session_cleaner, this);  // session cleaner
 
 	sip_fd = create_datagram_socket(5060);
