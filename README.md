@@ -81,7 +81,7 @@ The only ones you should use are:
 
 
 This library has been tested with the Asterisk VOIP server application (SIP and the new PJSIP drivers).
-You may need to tell your VOIP server to use either ALAW, PCMA or L16.
+You may need to tell your VOIP server to use either ALAW, PCMA, ULAW, PCMU or L16.
 
 
 written by Folkert van Heusden <mail@vanheusden.com> in 2022
