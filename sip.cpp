@@ -355,7 +355,7 @@ codec_t select_schema(const std::vector<std::string> *const body, const int max_
 
 		bool pick = false;
 
-		if (rate >= best.rate && (name == "l16" || name == "alaw" || name == "pcma" || name == "ulaw")) {
+		if (rate >= best.rate && (name == "l16" || name == "alaw" || name == "pcma" || name == "ulaw" || name == "pcmu")) {
 			if (abs(rate - max_rate) < abs(rate - best.rate) || best.rate == -1)
 				pick = true;
 		}
@@ -546,7 +546,7 @@ static std::pair<uint8_t *, int> create_rtp_packet(const uint32_t ssrc, const ui
 {
 	int sample_size = 0;
 
-	if (schema.name == "alaw" || schema.name == "pcma" || schema.name == "ulaw")  // a-law and mu-law
+	if (schema.name == "alaw" || schema.name == "pcma" || schema.name == "ulaw" || schema.name == "pcmu")  // a-law and mu-law
 		sample_size = sizeof(uint8_t);
 	else if (schema.name == "l16")	// l16 mono
 		sample_size = sizeof(uint16_t);
@@ -575,7 +575,7 @@ static std::pair<uint8_t *, int> create_rtp_packet(const uint32_t ssrc, const ui
 		for(int i=0; i<n_samples; i++)
 			rtp_packet[12 + i] = encode_alaw(samples[i]);
 	}
-	else if (schema.name == "ulaw") {	// mu-law
+	else if (schema.name == "ulaw" || schema.name == "pcmu") {	// mu-law
 		for(int i=0; i<n_samples; i++)
 			rtp_packet[12 + i] = encode_mulaw(samples[i]);
 	}
@@ -812,17 +812,17 @@ void sip::audio_input(const uint8_t *const payload, const size_t payload_size, s
 {
 	ss->latest_pkt = get_us();
 
-	if (ss->schema.name == "alaw" || ss->schema.name == "pcma" || ss->schema.name == "ulaw") {  // a-law and mu-law
+	if (ss->schema.name == "alaw" || ss->schema.name == "pcma" || ss->schema.name == "ulaw" || ss->schema.name == "pcmu") {  // a-law and mu-law
 		int n_samples = payload_size - 12;
 
 		if (n_samples > 0) {
 			short *temp = new short[n_samples];
 
-			if (ss->schema.name == "alaw") {
+			if (ss->schema.name == "alaw" || ss->schema.name == "pcma") {
 				for(int i=0; i<n_samples; i++)
 					temp[i] = decode_alaw(payload[12 + i]);
 			}
-			else if (ss->schema.name == "ulaw") {
+			else if (ss->schema.name == "ulaw" || ss->schema.name == "pcmu") {
 				for(int i=0; i<n_samples; i++)
 					temp[i] = decode_mulaw(payload[12 + i]);
 			}
