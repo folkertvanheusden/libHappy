@@ -5,8 +5,6 @@
 #include <netinet/in.h>
 #include <sys/socket.h>
 
-// TODO: error checking
-
 int create_datagram_socket(const int port)
 {
 	int fd = socket(AF_INET, SOCK_DGRAM, 0);
