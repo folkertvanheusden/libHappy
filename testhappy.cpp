@@ -59,7 +59,7 @@ int main(int argc, char *argv[])
 
 	// remote ip (IP address of upstream asterisk server), my extension-number, my password, my ip, my sip port, samplerate-used-by-callbacks, [callbacks...]
 	//sip s("172.29.0.1", "9999", "1234", "172.29.0.107", 5060, 60, 44100, cb_new_session, cb_recv, cb_send, cb_end_session, cb_dtmf);
-	sip s("192.168.64.1", "9999", "1234", "192.168.65.158", 5060, 60, 44100, cb_new_session, cb_recv, cb_send, cb_end_session, cb_dtmf);
+	sip s("192.168.64.1", "9999", "1234", { }, 5060, 60, 44100, cb_new_session, cb_recv, cb_send, cb_end_session, cb_dtmf);
 
 	// do whatever you like here, the sleep-loop is not required as long
 	// as the sip-object is left instantiated

@@ -77,7 +77,7 @@ private:
 	const std::string username;
 	const std::string password;
 
-	const std::string myip;
+	std::string       myip;
 	const int         myport;
 
 	int               sip_fd { -1 };
@@ -141,7 +141,7 @@ private:
 
 public:
 	sip(const std::string & upstream_sip_server, const std::string & upstream_sip_user, const std::string & upstream_sip_password,
-		const std::string & myip, const int myport,
+		const std::optional<std::string> & myip, const int myport,
 		const int sip_register_interval, const int samplerate,
 		std::function<bool(sip_session_t *const session)> new_session_callback,
 		std::function<bool(const short *const samples, const size_t n_samples, sip_session_t *const session)> recv_callback,
