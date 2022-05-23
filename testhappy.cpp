@@ -58,6 +58,7 @@ int main(int argc, char *argv[])
 	setlog("testhappy.log", debug, debug);
 
 	// remote ip (IP address of upstream asterisk server), my extension-number, my password, my ip, my sip port, samplerate-used-by-callbacks, [callbacks...]
+	// note: 'my ip' is only required when the library cannot figure out what IP address to use to contact the SIP server. This can happen when there's a NAT router in between for example.
 	//sip s("172.29.0.1", "9999", "1234", "172.29.0.107", 5060, 60, 44100, cb_new_session, cb_recv, cb_send, cb_end_session, cb_dtmf);
 	sip s("192.168.64.1", "9999", "1234", { }, 5060, 60, 44100, cb_new_session, cb_recv, cb_send, cb_end_session, cb_dtmf);
 
