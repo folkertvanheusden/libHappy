@@ -172,6 +172,9 @@ void sip::sip_input(const sockaddr_in *const a, const int fd, uint8_t *const pay
 			DOLOG(info, "SIP: drop 401 packet\n");
 		}
 	}
+	else if (parts.size() >= 2 && parts.at(0) == "SIP/2.0" && parts.at(1) == "200") {
+		// suppress error for this message; it is not an error but might confuse
+	}
 	else {
 		DOLOG(info, "SIP: request \"%s\" not understood\n", header_lines.at(0).c_str());
 	}

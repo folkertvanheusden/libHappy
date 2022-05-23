@@ -41,7 +41,7 @@ uint64_t get_us()
 	struct timespec ts { 0, 0 };
 
 	if (clock_gettime(CLOCK_REALTIME, &ts) == -1)
-		fprintf(stderr, "clock_gettime failed: %s\n", strerror(errno));
+		error_exit(true, "clock_gettime failed");
 
 	return uint64_t(ts.tv_sec) * uint64_t(1000000l) + uint64_t(ts.tv_nsec / 1000);
 }
@@ -192,7 +192,7 @@ void set_thread_name(std::string name)
 
 void myusleep(uint64_t us)
 {
-	struct timespec req;
+	struct timespec req { 0 };
 
 	req.tv_sec = us / 1000000l;
 	req.tv_nsec = (us % 1000000l) * 1000l;
