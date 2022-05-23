@@ -99,6 +99,8 @@ sip::~sip()
 {
 	stop_flag = true;
 
+	close(sip_fd);
+
 	th3->join();
 	delete th3;
 

@@ -32,7 +32,8 @@ int get_local_port(const int fd)
 	struct sockaddr a { 0 };
 	socklen_t       a_len { sizeof a };
 
-	getsockname(fd, &a, &a_len);
+	if (getsockname(fd, &a, &a_len) == -1)
+		return -1;
 
 	return ntohs(reinterpret_cast<const struct sockaddr_in *>(&a)->sin_port);
 }
