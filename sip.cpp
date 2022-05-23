@@ -53,10 +53,10 @@ static void resample(SRC_STATE *const state, const short *const in, const int in
 // http://dystopiancode.blogspot.com/2012/02/pcm-law-and-u-law-companding-algorithms.html
 static int8_t encode_alaw(int16_t number)
 {
-	uint16_t mask = 0x800;
-	uint8_t sign = 0;
-	uint8_t position = 11;
-	uint8_t lsb = 0;
+	uint16_t mask     = 0x800;
+	uint8_t  sign     = 0;
+	uint8_t  position = 11;
+	uint8_t  lsb      = 0;
 
 	if (number < 0) {
 		number = -number;
@@ -65,11 +65,39 @@ static int8_t encode_alaw(int16_t number)
 
 	number >>= 4; // 16 -> 12
 
-	for(; ((number & mask) != mask && position >= 5); mask >>= 1, position--);
+	for(; ((number & mask) != mask && position >= 5); mask >>= 1, position--) {
+	}
 
 	lsb = (number >> ((position == 4) ? (1) : (position - 4))) & 0x0f;
 
 	return (sign | ((position - 4) << 4) | lsb) ^ 0x55;
+}
+
+static int8_t encode_mulaw(int16_t number)
+{
+	const uint16_t MULAW_MAX  = 0x1FFF;
+	const uint16_t MULAW_BIAS = 33;
+	uint16_t mask     = 0x1000;
+	uint8_t  sign     = 0;
+	uint8_t  position = 12;
+	uint8_t  lsb      = 0;
+
+	if (number < 0) {
+		number = -number;
+		sign = 0x80;
+	}
+
+	number += MULAW_BIAS;
+
+	if (number > MULAW_MAX)
+		number = MULAW_MAX;
+
+	for (; ((number & mask) != mask && position >= 5); mask >>= 1, position--) {
+	}
+
+	lsb = (number >> (position - 4)) & 0x0f;
+
+	return ~(sign | ((position - 5) << 4) | lsb);
 }
 
 sip::sip(const std::string & upstream_sip_server, const std::string & upstream_sip_user, const std::string & upstream_sip_password,
@@ -327,7 +355,7 @@ codec_t select_schema(const std::vector<std::string> *const body, const int max_
 
 		bool pick = false;
 
-		if (rate >= best.rate && (name == "l16" || name == "alaw" || name == "pcma")) {
+		if (rate >= best.rate && (name == "l16" || name == "alaw" || name == "pcma" || name == "ulaw")) {
 			if (abs(rate - max_rate) < abs(rate - best.rate) || best.rate == -1)
 				pick = true;
 		}
@@ -518,7 +546,7 @@ static std::pair<uint8_t *, int> create_rtp_packet(const uint32_t ssrc, const ui
 {
 	int sample_size = 0;
 
-	if (schema.name == "alaw" || schema.name == "pcma")// a-law
+	if (schema.name == "alaw" || schema.name == "pcma" || schema.name == "ulaw")  // a-law and mu-law
 		sample_size = sizeof(uint8_t);
 	else if (schema.name == "l16")	// l16 mono
 		sample_size = sizeof(uint16_t);
@@ -546,6 +574,10 @@ static std::pair<uint8_t *, int> create_rtp_packet(const uint32_t ssrc, const ui
 	if (schema.name == "alaw" || schema.name == "pcma") {	// a-law
 		for(int i=0; i<n_samples; i++)
 			rtp_packet[12 + i] = encode_alaw(samples[i]);
+	}
+	else if (schema.name == "ulaw") {	// mu-law
+		for(int i=0; i<n_samples; i++)
+			rtp_packet[12 + i] = encode_mulaw(samples[i]);
 	}
 	else if (schema.name == "l16") {	// l16 mono
 		for(int i=0; i<n_samples; i++) {
@@ -754,23 +786,50 @@ static int16_t decode_alaw(int8_t number)
 	return sign == 0 ? decoded:-decoded;
 }
 
+static int16_t decode_mulaw(int8_t number)
+{
+	const uint16_t MULAW_BIAS = 33;
+	uint8_t        sign       = 0;
+	uint8_t        position   = 0;
+	int16_t        decoded    = 0;
+
+	number = ~number;
+
+	if (number & 0x80) {
+		number &= ~(1 << 7);
+		sign = -1;
+	}
+
+	position = ((number & 0xF0) >> 4) + 5;
+
+	decoded = ((1 << position) | ((number & 0x0F) << (position - 4))
+			| (1 << (position - 5))) - MULAW_BIAS;
+
+	return sign == 0 ? decoded : -decoded;
+}
+
 void sip::audio_input(const uint8_t *const payload, const size_t payload_size, sip_session_t *const ss)
 {
 	ss->latest_pkt = get_us();
 
-	if (ss->schema.name == "alaw" || ss->schema.name == "pcma") {  // a-law
+	if (ss->schema.name == "alaw" || ss->schema.name == "pcma" || ss->schema.name == "ulaw") {  // a-law and mu-law
 		int n_samples = payload_size - 12;
 
 		if (n_samples > 0) {
 			short *temp = new short[n_samples];
 
-			for(int i=0; i<n_samples; i++)
-				temp[i] = decode_alaw(payload[12 + i]);
+			if (ss->schema.name == "alaw") {
+				for(int i=0; i<n_samples; i++)
+					temp[i] = decode_alaw(payload[12 + i]);
+			}
+			else if (ss->schema.name == "ulaw") {
+				for(int i=0; i<n_samples; i++)
+					temp[i] = decode_mulaw(payload[12 + i]);
+			}
 
 			short *result   = nullptr;
 			int    result_n = 0;
 			resample(ss->audio_in_resample, temp, ss->schema.rate, n_samples, &result, samplerate, &result_n);
-			// printf("%d -> %d | %d/%d\n", n_samples, result_n, ss->schema.rate, samplerate);
 
 			recv_callback(result, result_n, ss);
 
