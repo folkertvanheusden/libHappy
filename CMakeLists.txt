@@ -17,6 +17,8 @@ add_library(
   net.cpp
   sip.cpp
   utils.cpp
+  libg722/g722_decode.c
+  libg722/g722_encode.c
 )
 
 set_target_properties(happy PROPERTIES VERSION ${PROJECT_VERSION} PUBLIC_HEADER sip.h)
@@ -62,7 +64,7 @@ target_compile_options(testhappy-alsa PUBLIC ${ALSA_CFLAGS_OTHER})
 
 include(FindPkgConfig)
 
-set_target_properties(happy PROPERTIES PUBLIC_HEADER "sip.h;utils.h")
+set_target_properties(happy PROPERTIES PUBLIC_HEADER "sip.h;utils.h;libg722/g722_encoder.h;libg722/g722_decoder.h;libg722/g722.h")
 
 include(GNUInstallDirs)
 

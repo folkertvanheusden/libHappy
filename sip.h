@@ -15,6 +15,11 @@
 // of this library (only need to include this file)
 #include "utils.h"
 
+extern "C" {
+#include "libg722/g722_decoder.h"
+#include "libg722/g722_encoder.h"
+}
+
 
 typedef struct {
 	uint8_t     id;
@@ -42,10 +47,13 @@ typedef struct _sip_session_ {
 
 	codec_t            schema        { 255, "", "", -1 };
 
-	std::atomic_uint64_t latest_pkt { 0 };
+	std::atomic_uint64_t latest_pkt  { 0 };
 
-	int                audio_port   { 0 };
-	int                fd           { -1 };
+	int                audio_port    { 0 };
+	int                fd            { -1 };
+
+	G722_ENC_CTX      *g722_encoder  { nullptr };
+	G722_DEC_CTX      *g722_decoder  { nullptr };
 
 	// callback data
 	std::string        call_id;
@@ -63,6 +71,12 @@ typedef struct _sip_session_ {
 	virtual ~_sip_session_() {
 		src_delete(audio_in_resample);
 		src_delete(audio_out_resample);
+
+		if (g722_encoder)
+			g722_encoder_destroy(g722_encoder);
+
+		if (g722_decoder)
+			g722_decoder_destroy(g722_decoder);
 
 		close(fd);
 	}

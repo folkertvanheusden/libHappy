@@ -297,12 +297,13 @@ void sip::reply_to_OPTIONS(const sockaddr_in *const a, const int fd, const std::
 	content.push_back("t=0 0");
 	// 1234 could be allocated but as this is send-
 	// only, it is not relevant  <--- TODO this comment needs to be re-evaluated
-	content.push_back("m=audio 1234 RTP/AVP 8 11 97");
+	content.push_back("m=audio 1234 RTP/AVP 0 8 9 11");
 	content.push_back("a=sendrecv");
+	content.push_back(myformat("a=rtpmap:0 PCMU/%u", samplerate));
 	content.push_back(myformat("a=rtpmap:8 PCMA/%u", samplerate));
+	content.push_back(myformat("a=rtpmap:9 G722/8000"));
 	content.push_back(myformat("a=rtpmap:11 L16/%u", samplerate));
 	content.push_back(myformat("a=rtpmap:101 telephone-event/%u", samplerate));
-	content.push_back("a=fmtp:97 mode=\"1,any\";vbr=on");
 
 	std::string content_out = merge(content, "\r\n");
 
@@ -364,6 +365,9 @@ codec_t select_schema(const std::vector<std::string> *const body, const int max_
 				pick = true;
 			else if (best.id == 255)
 				pick = true;
+		}
+		else if (pick == false && name == "g722") {
+			pick = true;
 		}
 
 		if (pick) {
@@ -427,6 +431,8 @@ void sip::reply_to_INVITE(const sockaddr_in *const a, const int fd, const std::v
 			ss->audio_port     = get_local_port(ss->fd);
 			ss->samplerate     = samplerate;
 			ss->call_id        = call_id.value();
+			ss->g722_encoder   = g722_encoder_new(64000, G722_SAMPLE_RATE_8000);
+			ss->g722_decoder   = g722_decoder_new(64000, G722_SAMPLE_RATE_8000);
 
 			// init audio resampler
 			int dummy = 0;
@@ -542,11 +548,13 @@ void sip::reply_to_UNAUTHORIZED(const sockaddr_in *const a, const int fd, const 
 	send_REGISTER(call_id_str, authorize);
 }
 
-static std::pair<uint8_t *, int> create_rtp_packet(const uint32_t ssrc, const uint16_t seq_nr, const uint32_t t, const codec_t & schema, const short *const samples, const int n_samples)
+static std::pair<uint8_t *, int> create_rtp_packet(const uint32_t ssrc, const uint16_t seq_nr, const uint32_t t, const codec_t & schema, const short *const samples, const int n_samples, G722_ENC_CTX *const g722_enc)
 {
 	int sample_size = 0;
 
 	if (schema.name == "alaw" || schema.name == "pcma" || schema.name == "ulaw" || schema.name == "pcmu")  // a-law and mu-law
+		sample_size = sizeof(uint8_t);
+	else if (schema.name == "g722")	// G722
 		sample_size = sizeof(uint8_t);
 	else if (schema.name == "l16")	// l16 mono
 		sample_size = sizeof(uint16_t);
@@ -578,6 +586,9 @@ static std::pair<uint8_t *, int> create_rtp_packet(const uint32_t ssrc, const ui
 	else if (schema.name == "ulaw" || schema.name == "pcmu") {	// mu-law
 		for(int i=0; i<n_samples; i++)
 			rtp_packet[12 + i] = encode_mulaw(samples[i]);
+	}
+	else if (schema.name == "g722") {  // g.722
+		g722_encode(g722_enc, samples, n_samples, &rtp_packet[12]);
 	}
 	else if (schema.name == "l16") {	// l16 mono
 		for(int i=0; i<n_samples; i++) {
@@ -631,7 +642,7 @@ bool sip::transmit_audio(const sockaddr_in tgt_addr, sip_session_t *const ss, co
 	while(n_audio > 0 && !stop_flag && !ss->stop_flag) {
 		int cur_n = std::min(n_audio, ss->schema.frame_size);
 
-		auto rtpp = create_rtp_packet(ssrc, *seq_nr, *t, ss->schema, &(resampled ? audio : audio_in)[offset], cur_n);
+		auto rtpp = create_rtp_packet(ssrc, *seq_nr, *t, ss->schema, &(resampled ? audio : audio_in)[offset], cur_n, ss->g722_encoder);
 
 		offset  += cur_n;
 		n_audio -= cur_n;
@@ -838,11 +849,30 @@ void sip::audio_input(const uint8_t *const payload, const size_t payload_size, s
 			delete [] temp;
 		}
 	}
+	else if (ss->schema.name == "g722") { // g.722
+		int n_samples = (payload_size - 12) / 2;
+
+		if (n_samples > 0) {
+			short *temp = new short[n_samples];
+
+			g722_decode(ss->g722_decoder, &payload[12], n_samples, temp);
+
+			short *result   = nullptr;
+			int    result_n = 0;
+			resample(ss->audio_in_resample, temp, 8000, n_samples, &result, samplerate, &result_n);
+
+			recv_callback(result, result_n, ss);
+
+			delete [] result;
+
+			delete [] temp;
+		}
+	}
 	else if (ss->schema.name == "l16") { // l16 mono
 		int n_samples = (payload_size - 12) / 2;
 
 		if (n_samples > 0) {
-			const short *samples = (const short *)&payload[12];
+			const short *samples = reinterpret_cast<const short *>(&payload[12]);
 
 			short *result   = nullptr;
 			int    result_n = 0;
