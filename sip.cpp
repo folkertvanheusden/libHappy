@@ -567,15 +567,15 @@ static std::pair<uint8_t *, int> create_rtp_packet(const uint32_t ssrc, const ui
 	uint8_t *rtp_packet = new uint8_t[size]();
 
 	rtp_packet[0] |= 128;  // v2
-	rtp_packet[1] = schema.id;
-	rtp_packet[2] = seq_nr >> 8;
-	rtp_packet[3] = seq_nr;
-	rtp_packet[4] = t >> 24;
-	rtp_packet[5] = t >> 16;
-	rtp_packet[6] = t >>  8;
-	rtp_packet[7] = t;
-	rtp_packet[8] = ssrc >> 24;
-	rtp_packet[9] = ssrc >> 16;
+	rtp_packet[1]  = schema.id;
+	rtp_packet[2]  = seq_nr >> 8;
+	rtp_packet[3]  = seq_nr;
+	rtp_packet[4]  = t >> 24;
+	rtp_packet[5]  = t >> 16;
+	rtp_packet[6]  = t >>  8;
+	rtp_packet[7]  = t;
+	rtp_packet[8]  = ssrc >> 24;
+	rtp_packet[9]  = ssrc >> 16;
 	rtp_packet[10] = ssrc >>  8;
 	rtp_packet[11] = ssrc;
 
