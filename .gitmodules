@@ -1,0 +1,3 @@
+[submodule "libg722"]
+	path = libg722
+	url = https://github.com/sippy/libg722.git
