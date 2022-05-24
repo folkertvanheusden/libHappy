@@ -64,16 +64,21 @@ target_compile_options(testhappy-alsa PUBLIC ${ALSA_CFLAGS_OTHER})
 
 include(FindPkgConfig)
 
-set_target_properties(happy PROPERTIES PUBLIC_HEADER "sip.h;utils.h;libg722/g722_encoder.h;libg722/g722_decoder.h;libg722/g722.h")
+set_target_properties(happy PROPERTIES PUBLIC_HEADER "sip.h;utils.h")
 
 include(GNUInstallDirs)
 
 install(TARGETS happy
 	LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
-	PUBLIC_HEADER DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/${PROJECT_NAME})
+	PUBLIC_HEADER DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/${PROJECT_NAME}
+	)
 
 configure_file(libhappy.pc.in libhappy.pc @ONLY)
 
 install(FILES ${CMAKE_BINARY_DIR}/libhappy.pc DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/pkgconfig)
+
+install(FILES libg722/g722_encoder.h DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/${PROJECT_NAME}/libg722)
+install(FILES libg722/g722_decoder.h DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/${PROJECT_NAME}/libg722)
+install(FILES libg722/g722.h DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/${PROJECT_NAME}/libg722)
 
 install(FILES testhappy-alsa.cpp testhappy.cpp README.md LICENSE DESTINATION ${CMAKE_INSTALL_DOCDIR})
