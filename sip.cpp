@@ -366,7 +366,7 @@ codec_t select_schema(const std::vector<std::string> *const body, const int max_
 			else if (best.id == 255)
 				pick = true;
 		}
-		else if (pick == false && name == "g722") {
+		else if (name == "g722") {
 			pick = true;
 		}
 
