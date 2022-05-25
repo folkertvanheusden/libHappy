@@ -106,6 +106,9 @@ private:
 
 	const int         samplerate { 44100 };
 
+	// the one attached to the 'From'-header
+	std::string       tag;
+
 	// called when a new session is started, one can set 'private_data'
 	std::function<bool(sip_session_t *const session, const std::string & from)> new_session_callback;
 

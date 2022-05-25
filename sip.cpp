@@ -138,6 +138,8 @@ sip::sip(const std::string & upstream_sip_server, const std::string & upstream_s
 
 	myaddr = this->myip + myformat(":%d", this->myport);
 
+	tag    = random_hex(16);
+
 	th1 = new std::thread(&sip::session_cleaner, this);  // session cleaner
 
 	th2 = new std::thread(&sip::register_thread, this);  // keep-alive to upstream SIP
@@ -172,15 +174,18 @@ void sip::sip_listener()
 			break;
 
 		if (rc == 1) {
-			uint8_t     buffer[1600] { 0 };
+			uint8_t     buffer[9999] { 0 };  // room for (most) jumbo frame-sizes
 
 			sockaddr_in addr         { 0 };
 			socklen_t   addr_len     { sizeof addr };
 
-			ssize_t recv_rc = recvfrom(sip_fd, buffer, sizeof buffer, 0, reinterpret_cast<struct sockaddr *>(&addr), &addr_len);
+			ssize_t recv_rc = recvfrom(sip_fd, buffer, sizeof buffer - 1, 0, reinterpret_cast<struct sockaddr *>(&addr), &addr_len);
 
-			if (recv_rc > 0)
+			if (recv_rc > 0) {
+				DOLOG(debug, "%s", buffer);
+
 				sip_input(&addr, sip_fd, buffer, recv_rc);
+			}
 		}
 	}
 }
@@ -291,6 +296,8 @@ static void create_response_headers(const std::string & request, std::vector<std
 
 bool sip::transmit_packet(const sockaddr_in *const a, const int fd, const uint8_t *const data, const size_t data_size)
 {
+	DOLOG(debug, "%s", std::string(reinterpret_cast<const char *>(data), data_size).c_str());
+
 	return sendto(fd, data, data_size, 0, reinterpret_cast<const struct sockaddr *>(a), sizeof *a) == ssize_t(data_size);
 }
 
@@ -1005,10 +1012,10 @@ bool sip::send_REGISTER(const std::string & call_id, const std::string & authori
 	}
 
 	out += "Via: SIP/2.0/UDP " + myaddr + "\r\n";
-	out += "User-Agent: Happy\r\n";
-	out += "From: <sip:" + username + "@" + tgt_addr + ">;tag=277FD9F0-2607D15D\r\n"; // TODO
-	out += "To: <sip:" + username + "@" + tgt_addr + ">\r\n";
-	out += "Contact: <sip:" + username + "@" + myaddr + ">;q=1\r\n";
+	out += "User-Agent: libHappy\r\n";
+	out += "From: <sip:"    + username + "@" + tgt_addr + ">;tag=" + tag + "\r\n";
+	out += "To: <sip:"      + username + "@" + tgt_addr + ">\r\n";
+	out += "Contact: <sip:" + username + "@" + myaddr   + ">;q=1\r\n";
 	out += "Allow: INVITE,ACK,OPTIONS,BYE,CANCEL,SUBSCRIBE,NOTIFY,REFER,MESSAGE,INFO,PING\r\n";
 	out += "Expires: 60\r\n";
 	out += "Content-Length: 0\r\n";
