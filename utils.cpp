@@ -21,6 +21,7 @@
 
 #include "utils.h"
 
+// replace by std::format when c++20 is more common
 std::string myformat(const char *const fmt, ...)
 {
         char *buffer = nullptr;
