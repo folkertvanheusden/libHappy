@@ -159,9 +159,9 @@ snd_pcm_t *open_alsa_play(const std::string & dev_name)
 // one can set 'session->private_data' to point to internal
 // data of the callback. you need to free it yourself in
 // e.g. the end_session callback.
-bool cb_new_session(sip_session_t *const session)
+bool cb_new_session(sip_session_t *const session, const std::string & from)
 {
-	printf("cb_new_session, call-id: %s\n", session->call_id.c_str());
+	printf("cb_new_session, call-id: %s, caller: %s\n", session->call_id.c_str(), from.c_str());
 
 	session->private_data = new alsa_sessions_t;
 	alsa_sessions_t   *p = reinterpret_cast<alsa_sessions_t *>(session->private_data);

@@ -103,7 +103,7 @@ static int8_t encode_mulaw(int16_t number)
 sip::sip(const std::string & upstream_sip_server, const std::string & upstream_sip_user, const std::string & upstream_sip_password,
 		const std::optional<std::string> & myip, const int myport,
 		const int sip_register_interval, const int samplerate,
-		std::function<bool(sip_session_t *const session)> new_session_callback,
+		std::function<bool(sip_session_t *const session, const std::string & from)> new_session_callback,
 		std::function<bool(const short *const samples, const size_t n_samples, sip_session_t *const session)> recv_callback,
 		std::function<bool(short **const samples, size_t *const n_samples, sip_session_t *const session)> send_callback,
 		std::function<void(sip_session_t *const session)> end_session_callback,
@@ -423,6 +423,16 @@ void sip::reply_to_INVITE(const sockaddr_in *const a, const int fd, const std::v
 			if (call_id.has_value() == false)
 				return;
 
+			auto from          = find_header(headers, "From");
+			if (from.has_value() == false)
+				return;
+
+			std::string from_value = from.value();
+
+			std::size_t semi_colon = from_value.find(';');
+			if (semi_colon != std::string::npos)
+				from_value = from_value.substr(0, semi_colon);
+
 			sip_session_t *ss  = new sip_session_t();
 			ss->start_ts       = get_us();
 			ss->headers        = *headers;
@@ -450,24 +460,45 @@ void sip::reply_to_INVITE(const sockaddr_in *const a, const int fd, const std::v
 
 			std::string content_out = merge(content, "\r\n");
 
-			// merge headers
-			std::vector<std::string> hout;
-			create_response_headers("SIP/2.0 200 OK", &hout, false, headers, content_out.size(), ss->sip_addr_peer, myip);
-			std::string headers_out = merge(hout, "\r\n");
+			if (new_session_callback(ss, from_value)) {
+				// merge headers
+				std::vector<std::string> hout;
+				create_response_headers("SIP/2.0 200 OK", &hout, false, headers, content_out.size(), ss->sip_addr_peer, myip);
 
-			std::string out = headers_out + "\r\n" + content_out;
+				std::string headers_out = merge(hout, "\r\n");
 
-			// send INVITE reply
-			if (transmit_packet(a, fd, (const uint8_t *)out.c_str(), out.size()) == false)
-				DOLOG(info, "sip::reply_to_INVITE: transmit failed");
+				std::string out = headers_out + "\r\n" + content_out;
+
+				// send INVITE reply
+				if (transmit_packet(a, fd, (const uint8_t *)out.c_str(), out.size()) == false) {
+					DOLOG(info, "sip::reply_to_INVITE: ok transmit failed");
+
+					end_session_callback(ss);  // cannot transmit, session ended
+
+					delete ss;
+				}
+				else {
+					ss->th = new std::thread(&sip::session, this, *a, tgt_rtp_port, ss);
+
+					std::unique_lock<std::mutex> lck(slock);
+
+					sessions.insert({ call_id.value(), ss });
+				}
+			}
 			else {
-				new_session_callback(ss);
+				// merge headers
+				std::vector<std::string> hout;
+				create_response_headers("SIP/2.0 608 Rejected", &hout, false, headers, content_out.size(), ss->sip_addr_peer, myip);
 
-				ss->th = new std::thread(&sip::session, this, *a, tgt_rtp_port, ss);
+				std::string headers_out = merge(hout, "\r\n");
 
-				std::unique_lock<std::mutex> lck(slock);
+				std::string out = headers_out + "\r\n" + content_out;
 
-				sessions.insert({ call_id.value(), ss });
+				// send rejection reply
+				if (transmit_packet(a, fd, (const uint8_t *)out.c_str(), out.size()) == false)
+					DOLOG(info, "sip::reply_to_INVITE: rejection transmit failed");
+
+				delete ss;
 			}
 		}
 	}

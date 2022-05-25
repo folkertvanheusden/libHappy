@@ -101,7 +101,7 @@ private:
 	const int samplerate;
 
 	// called when a new session is started, one can set 'private_data'
-	std::function<bool(sip_session_t *const session)> new_session_callback;
+	std::function<bool(sip_session_t *const session, const std::string & from)> new_session_callback;
 
 	// called when we receive audio from peer
 	std::function<bool(const short *const samples, const size_t n_samples, sip_session_t *const session)> recv_callback;
@@ -157,7 +157,7 @@ public:
 	sip(const std::string & upstream_sip_server, const std::string & upstream_sip_user, const std::string & upstream_sip_password,
 		const std::optional<std::string> & myip, const int myport,
 		const int sip_register_interval, const int samplerate,
-		std::function<bool(sip_session_t *const session)> new_session_callback,
+		std::function<bool(sip_session_t *const session, const std::string & from)> new_session_callback,
 		std::function<bool(const short *const samples, const size_t n_samples, sip_session_t *const session)> recv_callback,
 		std::function<bool(short **const samples, size_t *const n_samples, sip_session_t *const session)> send_callback,
 		std::function<void(sip_session_t *const session)> end_session_callback,

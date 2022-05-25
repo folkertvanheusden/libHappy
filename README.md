@@ -54,8 +54,10 @@ You instantiate the 'sip' class with the following parameters
 
 The last 5 parameters are pointers to the callback functions:
 
-* bool new\_session(session\_t \*const session)
+* bool new\_session(session\_t \*const session, const std::string & from)
   Called when a new SIP session is starting. Return true if you're ready, false to deny.
+  session-\>headers contains all the INVITE request-headers.
+  'from' is a copy of the SIP "From"-field. It contains the address of the caller.
 
 * bool recv\_callback(const short \*const samples, const size\_t n\_samples, sip\_session\_t \*const session)
   Called when the library received audio from "the other end" (the peer). Return false if you want to abort the session.
