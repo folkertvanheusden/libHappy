@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.7)
 
-project(libhappy VERSION 0.2.0 DESCRIPTION "libHappy - a VOIP/SIP library")
+project(libhappy VERSION 0.3.0 DESCRIPTION "libHappy - a VOIP/SIP library")
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED True)
