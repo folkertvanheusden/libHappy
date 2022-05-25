@@ -48,9 +48,11 @@ void cb_end_session(sip_session_t *const session)
 // note that may come in multiple times for the
 // same key-press. this is due to how they are
 // transmitted
-void cb_dtmf(const uint8_t dtmf_code, const bool is_end, const uint8_t volume, sip_session_t *const session)
+bool cb_dtmf(const uint8_t dtmf_code, const bool is_end, const uint8_t volume, sip_session_t *const session)
 {
 	printf("DTMF pressed: %d\n", dtmf_code);
+
+	return true;
 }
 
 int main(int argc, char *argv[])

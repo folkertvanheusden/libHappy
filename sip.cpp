@@ -107,7 +107,7 @@ sip::sip(const std::string & upstream_sip_server, const std::string & upstream_s
 		std::function<bool(const short *const samples, const size_t n_samples, sip_session_t *const session)> recv_callback,
 		std::function<bool(short **const samples, size_t *const n_samples, sip_session_t *const session)> send_callback,
 		std::function<void(sip_session_t *const session)> end_session_callback,
-		std::function<void(const uint8_t dtmf_code, const bool is_end, const uint8_t volume, sip_session_t *const session)> dtmf_callback,
+		std::function<bool(const uint8_t dtmf_code, const bool is_end, const uint8_t volume, sip_session_t *const session)> dtmf_callback,
 		void *const global_private_data) :
 	upstream_server(upstream_sip_server), username(upstream_sip_user), password(upstream_sip_password),
 	interval(sip_register_interval),
@@ -764,10 +764,18 @@ void sip::wait_for_audio(sip_session_t *const ss)
 				      	// 101 is statically assigned (in this library) to "telephone-event" rtp-type
 					dolog(debug, "TELEPHONE EVENT %d, %02x\n", buffer[12], buffer[13]);
 
-					dtmf_callback(buffer[12], !!(buffer[13] & 128), buffer[13] & 63, ss);
+					if (!dtmf_callback(buffer[12], !!(buffer[13] & 128), buffer[13] & 63, ss)) {
+						ss->stop_flag = true;
+
+						break;
+					}
 				}
 				else {
-					audio_input(buffer, recv_rc, ss);
+					if (!audio_input(buffer, recv_rc, ss)) {
+						ss->stop_flag = true;
+
+						break;
+					}
 				}
 			}
 		}
@@ -885,8 +893,10 @@ static int16_t decode_mulaw(int8_t number)
 	return sign == 0 ? decoded : -decoded;
 }
 
-void sip::audio_input(const uint8_t *const payload, const size_t payload_size, sip_session_t *const ss)
+bool sip::audio_input(const uint8_t *const payload, const size_t payload_size, sip_session_t *const ss)
 {
+	bool ok = false;
+
 	ss->latest_pkt = get_us();
 
 	if (ss->schema.name == "alaw" || ss->schema.name == "pcma" || ss->schema.name == "ulaw" || ss->schema.name == "pcmu") {  // a-law and mu-law
@@ -908,7 +918,8 @@ void sip::audio_input(const uint8_t *const payload, const size_t payload_size, s
 			int    result_n = 0;
 			resample(ss->audio_in_resample, temp, ss->schema.rate, n_samples, &result, samplerate, &result_n);
 
-			recv_callback(result, result_n, ss);
+			if (recv_callback(result, result_n, ss))
+				ok = true;
 
 			delete [] result;
 
@@ -927,7 +938,8 @@ void sip::audio_input(const uint8_t *const payload, const size_t payload_size, s
 			int    result_n = 0;
 			resample(ss->audio_in_resample, temp, 8000, n_samples, &result, samplerate, &result_n);
 
-			recv_callback(result, result_n, ss);
+			if (recv_callback(result, result_n, ss))
+				ok = true;
 
 			delete [] result;
 
@@ -944,7 +956,8 @@ void sip::audio_input(const uint8_t *const payload, const size_t payload_size, s
 			int    result_n = 0;
 			resample(ss->audio_in_resample, samples, ss->schema.rate, n_samples, &result, samplerate, &result_n);
 
-			recv_callback(result, result_n, ss);
+			if (recv_callback(result, result_n, ss))
+				ok = true;
 
 			delete [] result;
 		}
@@ -952,6 +965,11 @@ void sip::audio_input(const uint8_t *const payload, const size_t payload_size, s
 	else {
 		DOLOG(warning, "SIP: unsupported incoming schema %s/%d\n", ss->schema.name.c_str(), ss->schema.rate);
 	}
+
+	if (!ok)
+		DOLOG(warning, "SIP: session termination requested by recv_callback or not being able to decode rtp data\n");
+
+	return ok;
 }
 
 void sip::session_cleaner()

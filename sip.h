@@ -122,7 +122,7 @@ private:
 	std::function<void(sip_session_t *const session)> end_session_callback;
 
 	// called when a DTMF event has been received
-	std::function<void(const uint8_t code, const bool is_end, const uint8_t volume, sip_session_t *const session)> dtmf_callback;
+	std::function<bool(const uint8_t code, const bool is_end, const uint8_t volume, sip_session_t *const session)> dtmf_callback;
 
 	void       *const global_private_data { nullptr };
 
@@ -152,7 +152,7 @@ private:
 	void reply_to_UNAUTHORIZED(const std::vector<std::string> *const headers);
 	void send_ACK(const sockaddr_in *const a, const int fd, const std::vector<std::string> *const headers);
 
-	void audio_input(const uint8_t *const payload, const size_t payload_size, sip_session_t *const ss);
+	bool audio_input(const uint8_t *const payload, const size_t payload_size, sip_session_t *const ss);
 	void wait_for_audio(sip_session_t*);
 
 	void sip_input(const sockaddr_in *const a, const int fd, uint8_t *const payload, const size_t payload_size);
@@ -172,7 +172,7 @@ public:
 		std::function<bool(const short *const samples, const size_t n_samples, sip_session_t *const session)> recv_callback,
 		std::function<bool(short **const samples, size_t *const n_samples, sip_session_t *const session)> send_callback,
 		std::function<void(sip_session_t *const session)> end_session_callback,
-		std::function<void(const uint8_t dtmf_code, const bool is_end, const uint8_t volume, sip_session_t *const session)> dtmf_callback,
+		std::function<bool(const uint8_t dtmf_code, const bool is_end, const uint8_t volume, sip_session_t *const session)> dtmf_callback,
 		void *const global_private_data);
 
 	virtual ~sip();

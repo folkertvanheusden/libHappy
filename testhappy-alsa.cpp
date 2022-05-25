@@ -216,8 +216,6 @@ bool cb_recv(const short *const samples, const size_t n_samples, sip_session_t *
 	int err = snd_pcm_writei(p->play_handle, samples, n_samples);
 
 	if (err == -EPIPE) {
-		printf("EPIPE\n");
-
 		snd_pcm_prepare(p->play_handle);
 	}
 	else if (err < 0) {
@@ -257,8 +255,6 @@ bool cb_send(short **const samples, size_t *const n_samples, sip_session_t *cons
 
 	using namespace std::chrono_literals;
 
-	uint64_t start = get_us();
-
 	while(p->buffers.empty()) {
 		p->buffer_cv.wait_for(lck, 500ms);
 
@@ -268,8 +264,6 @@ bool cb_send(short **const samples, size_t *const n_samples, sip_session_t *cons
 			return false;
 		}
 	}
-
-	uint64_t fin = get_us();
 
 	*samples   = p->buffers.front();
 	p->buffers.pop();
@@ -305,9 +299,11 @@ void cb_end_session(sip_session_t *const session)
 	delete p;
 }
 
-void cb_dtmf(const uint8_t dtmf_code, const bool is_end, const uint8_t volume, sip_session_t *const session)
+bool cb_dtmf(const uint8_t dtmf_code, const bool is_end, const uint8_t volume, sip_session_t *const session)
 {
 	printf("DTMF pressed: %d\n", dtmf_code);
+
+	return true;
 }
 
 void sigh(int sig)
