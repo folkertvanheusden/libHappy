@@ -8,6 +8,7 @@
 #include <stdint.h>
 #include <string>
 #include <thread>
+#include <unistd.h>
 #include <vector>
 #include <netinet/in.h>
 
