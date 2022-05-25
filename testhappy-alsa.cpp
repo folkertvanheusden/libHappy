@@ -196,8 +196,6 @@ bool cb_recv(const short *const samples, const size_t n_samples, sip_session_t *
 
 	double  gain_n_samples = 300.0 / session->schema.frame_duration; // calculate fragment over 300ms
 
-	printf("duration: %d, blen: %d\n", session->schema.frame_duration, p->buffer_length);
-
 	// update moving average for gain
 	double avg = 0;
 
@@ -240,8 +238,6 @@ bool cb_send(short **const samples, size_t *const n_samples, sip_session_t *cons
 	if (p->rec_th == nullptr) {
 		p->rec_th = new std::thread([p, session]() {
 			while(!*p->stop_flag) {
-				uint64_t start = get_us();
-
 				short *buffer = new short[p->buffer_length];
 
 				int err = snd_pcm_readi(p->capture_handle, buffer, p->buffer_length);
@@ -253,10 +249,6 @@ bool cb_send(short **const samples, size_t *const n_samples, sip_session_t *cons
 				p->buffers.push(buffer);
 
 				p->buffer_cv.notify_all();
-
-				uint64_t fin = get_us();
-
-				printf("record audio: %lu\n", fin - start);
 			}
 		});
 	}
@@ -278,8 +270,6 @@ bool cb_send(short **const samples, size_t *const n_samples, sip_session_t *cons
 	}
 
 	uint64_t fin = get_us();
-
-	printf("wait for audio: %lu\n", fin - start);
 
 	*samples   = p->buffers.front();
 	p->buffers.pop();
