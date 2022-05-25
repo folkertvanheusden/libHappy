@@ -138,7 +138,7 @@ private:
 	bool send_REGISTER(const std::string & call_id, const std::string & authorize);
 	void register_thread();
 
-	void reply_to_UNAUTHORIZED(const sockaddr_in *const a, const int fd, const std::vector<std::string> *const headers);
+	void reply_to_UNAUTHORIZED(const std::vector<std::string> *const headers);
 	void send_ACK(const sockaddr_in *const a, const int fd, const std::vector<std::string> *const headers);
 
 	void audio_input(const uint8_t *const payload, const size_t payload_size, sip_session_t *const ss);

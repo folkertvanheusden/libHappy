@@ -206,7 +206,7 @@ void sip::sip_input(const sockaddr_in *const a, const int fd, uint8_t *const pay
 	}
 	else if (parts.size() >= 2 && parts.at(0) == "SIP/2.0" && parts.at(1) == "401") {
 		if (now - ddos_protection > 1000000) {
-			reply_to_UNAUTHORIZED(a, fd, &header_lines);
+			reply_to_UNAUTHORIZED(&header_lines);
 			ddos_protection = now;
 		}
 		else {
@@ -293,7 +293,7 @@ void sip::reply_to_OPTIONS(const sockaddr_in *const a, const int fd, const std::
 	content.push_back("v=0");
 	content.push_back("o=jdoe 0 0 IN " + proto + " " + sockaddr_to_str(*a).c_str()); // my ip
 	content.push_back("c=IN " + proto + " " + sockaddr_to_str(*a).c_str()); // my ip
-	content.push_back("s=Happy");
+	content.push_back("s=libHappy");
 	content.push_back("t=0 0");
 	// 1234 could be allocated but as this is send-
 	// only, it is not relevant  <--- TODO this comment needs to be re-evaluated
@@ -354,6 +354,7 @@ codec_t select_schema(const std::vector<std::string> *const body, const int max_
 		std::string name = str_tolower(type_rate.substr(0, slash));
 		int rate = atoi(type_rate.substr(slash + 1).c_str());
 
+		// TODO pick best from m=audio order
 		bool pick = false;
 
 		if (rate >= best.rate && (name == "l16" || name == "alaw" || name == "pcma" || name == "ulaw" || name == "pcmu")) {
@@ -507,7 +508,7 @@ void sip::reply_to_BYE(const sockaddr_in *const a, const int fd, const std::vect
 	send_ACK(a, fd, headers);
 }
 
-void sip::reply_to_UNAUTHORIZED(const sockaddr_in *const a, const int fd, const std::vector<std::string> *const headers)
+void sip::reply_to_UNAUTHORIZED(const std::vector<std::string> *const headers)
 {
 	auto str_wa = find_header(headers, "WWW-Authenticate");
 	if (!str_wa.has_value()) {
