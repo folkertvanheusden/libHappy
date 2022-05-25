@@ -1,12 +1,17 @@
 // (C) 2021-2022 by folkert van heusden <mail@vanheusden.com>, released under Apache License v2.0
+#include <errno.h>
 #include <optional>
 #include <string>
+#include <string.h>
 #include <unistd.h>
 #include <arpa/inet.h>
 #include <net/if.h>
 #include <netinet/in.h>
 #include <sys/ioctl.h>
 #include <sys/socket.h>
+
+#include "utils.h"
+
 
 int create_datagram_socket(const int port)
 {
@@ -21,6 +26,8 @@ int create_datagram_socket(const int port)
 
 	if (bind(fd, reinterpret_cast<const struct sockaddr *>(&a), sizeof(a)) == -1) {
 		close(fd);
+
+		DOLOG(ll_error, "Cannot bind to port %d: %s\n", port, strerror(errno));
 
 		return -1;
 	}
