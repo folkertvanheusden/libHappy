@@ -97,7 +97,7 @@ private:
 	const std::string password;
 
 	std::string       myip;
-	const int         myport     { 5060 };
+	int               myport     { 5060 };
 	std::string       myaddr;
 
 	int               sip_fd     { -1 };
