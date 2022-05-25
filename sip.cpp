@@ -328,17 +328,31 @@ void sip::reply_to_OPTIONS(const sockaddr_in *const a, const int fd, const std::
 
 codec_t select_schema(const std::vector<std::string> *const body, const int max_rate)
 {
-	codec_t best { 255, "", "", -1, -1 };
+	codec_t                  best { 255, "", "", -1, -1 };
 
-	int     frame_duration = 20;
+	int                      frame_duration = 20;
 
-	for(std::string line : *body) {
-		// printf("%s\n", line.c_str());
+	std::vector<std::string> order;
+
+	// id, (org-)name, rate
+	std::map<int, std::pair<std::string, int> > options;
+
+	for(auto & line : *body) {
+		DOLOG(debug, "SPD: %s\n", line.c_str());
 
 		if (line.substr(0, 11) == "a=maxptime:") {
 			frame_duration = std::min(40, atoi(line.substr(11).c_str()));
 
 			DOLOG(debug, "select_schema: frame duration set to %dms\n", frame_duration);
+
+			continue;
+		}
+
+		if (line.substr(0, 7) == "m=audio") {
+			order = split(line, " ");
+
+			// "m=audio 19206 RTP/AVP" are not of interest
+			order.erase(order.begin(), order.begin() + 3);
 
 			continue;
 		}
@@ -358,33 +372,35 @@ codec_t select_schema(const std::vector<std::string> *const body, const int max_
 		if (slash == std::string::npos)
 			continue;
 
-		uint8_t id = atoi(pars.substr(0, lspace).c_str());
+		uint8_t     id   = atoi(pars.substr(0, lspace).c_str());
 
-		std::string name = str_tolower(type_rate.substr(0, slash));
-		int rate = atoi(type_rate.substr(slash + 1).c_str());
+		std::string name = type_rate.substr(0, slash);
+		int         rate = atoi(type_rate.substr(slash + 1).c_str());
 
-		// TODO pick best from m=audio order
-		bool pick = false;
+		options.insert({ id, { name, rate } });
+	}
 
-		if (rate >= best.rate && (name == "l16" || name == "alaw" || name == "pcma" || name == "ulaw" || name == "pcmu")) {
-			if (abs(rate - max_rate) < abs(rate - best.rate) || best.rate == -1)
-				pick = true;
-		}
-		else if (rate == best.rate) {
-			if (name == "l16")
-				pick = true;
-			else if (best.id == 255)
-				pick = true;
-		}
-		else if (name == "g722") {
-			pick = true;
-		}
+	for(auto & order_element : order) {
+		int  order_id    = atoi(order_element.c_str());
 
-		if (pick) {
-			best.rate = rate;
-			best.id = id;
-			best.name = name;
-			best.org_name = type_rate.substr(0, slash);
+		auto it          = options.find(order_id);
+
+		// might be missing due to bugs in the other end
+		if (it == options.end())
+			continue;
+
+		std::string name = str_tolower(it->second.first);
+
+		if (name == "pcma" || name == "alaw" ||
+		    name == "pcmu" || name == "ulaw" ||
+		    name == "l16"  ||
+		    name == "g722") {
+			best.id       = order_id;
+			best.name     = name;
+			best.org_name = it->second.first;
+			best.rate     = it->second.second;
+
+			break;
 		}
 	}
 
