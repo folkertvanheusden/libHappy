@@ -98,6 +98,7 @@ private:
 
 	std::string       myip;
 	const int         myport     { 5060 };
+	std::string       myaddr;
 
 	int               sip_fd     { -1 };
 

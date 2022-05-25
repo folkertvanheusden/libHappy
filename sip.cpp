@@ -129,6 +129,8 @@ sip::sip(const std::string & upstream_sip_server, const std::string & upstream_s
 		DOLOG(debug, "Local IP address: %s\n", this->myip.c_str());
 	}
 
+	myaddr = this->myip + myformat(":%d", myport);
+
 	th1 = new std::thread(&sip::session_cleaner, this);  // session cleaner
 
 	sip_fd = create_datagram_socket(myport);
@@ -223,7 +225,7 @@ void sip::sip_input(const sockaddr_in *const a, const int fd, uint8_t *const pay
 	}
 }
 
-static void create_response_headers(const std::string & request, std::vector<std::string> *const target, const bool upd_cseq, const std::vector<std::string> *const source, const size_t c_size, const sockaddr_in & a, const std::string & myip)
+static void create_response_headers(const std::string & request, std::vector<std::string> *const target, const bool upd_cseq, const std::vector<std::string> *const source, const size_t c_size, const sockaddr_in & a, const std::string & myaddr)
 {
 	target->push_back(request);
 
@@ -258,7 +260,7 @@ static void create_response_headers(const std::string & request, std::vector<std
 		}
 	}
 
-	target->push_back(myformat("Server: %s", myip.c_str()));
+	target->push_back(myformat("Server: %s", myaddr.c_str()));
 
 	//target->push_back("Allow: INVITE, ASK, CANCEL, OPTIONS, BYE");
 	target->push_back("Allow: INVITE, ACK, CANCEL, OPTIONS, BYE, REFER, SUBSCRIBE, NOTIFY, INFO, PUBLISH, MESSAGE");
@@ -310,7 +312,7 @@ void sip::reply_to_OPTIONS(const sockaddr_in *const a, const int fd, const std::
 	std::string content_out = merge(content, "\r\n");
 
 	std::vector<std::string> hout;
-	create_response_headers("SIP/2.0 200 OK", &hout, false, headers, content_out.size(), *a, myip);
+	create_response_headers("SIP/2.0 200 OK", &hout, false, headers, content_out.size(), *a, myaddr);
 	std::string headers_out = merge(hout, "\r\n");
 
 	std::string out = headers_out + "\r\n" + content_out;
@@ -466,7 +468,7 @@ void sip::reply_to_INVITE(const sockaddr_in *const a, const int fd, const std::v
 			if (new_session_callback(ss, from_value)) {
 				// merge headers
 				std::vector<std::string> hout;
-				create_response_headers("SIP/2.0 200 OK", &hout, false, headers, content_out.size(), ss->sip_addr_peer, myip);
+				create_response_headers("SIP/2.0 200 OK", &hout, false, headers, content_out.size(), ss->sip_addr_peer, myaddr);
 
 				std::string headers_out = merge(hout, "\r\n");
 
@@ -491,7 +493,7 @@ void sip::reply_to_INVITE(const sockaddr_in *const a, const int fd, const std::v
 			else {
 				// merge headers
 				std::vector<std::string> hout;
-				create_response_headers("SIP/2.0 608 Rejected", &hout, false, headers, content_out.size(), ss->sip_addr_peer, myip);
+				create_response_headers("SIP/2.0 608 Rejected", &hout, false, headers, content_out.size(), ss->sip_addr_peer, myaddr);
 
 				std::string headers_out = merge(hout, "\r\n");
 
@@ -510,7 +512,7 @@ void sip::reply_to_INVITE(const sockaddr_in *const a, const int fd, const std::v
 void sip::send_ACK(const sockaddr_in *const a, const int fd, const std::vector<std::string> *const headers)
 {
 	std::vector<std::string> hout;
-	create_response_headers("SIP/2.0 200 OK", &hout, false, headers, 0, *a, myip);
+	create_response_headers("SIP/2.0 200 OK", &hout, false, headers, 0, *a, myaddr);
 
 	std::string out = merge(hout, "\r\n");
 
@@ -572,11 +574,11 @@ void sip::reply_to_UNAUTHORIZED(const std::vector<std::string> *const headers)
 		nonce = replace(str_nonce.value(), "\"", "");
 
 	std::string a1 = md5(username + ":" + realm + ":" + password);
-	std::string a2 = md5("REGISTER:sip:" + myip);
+	std::string a2 = md5("REGISTER:sip:" + myaddr);
 
 	std::string digest = md5(a1 + ":" + nonce + ":" + a2);
 
-	std::string authorize = "Authorization: Digest username=\"" + username + "\",realm=\"" + realm + "\",nonce=\"" + nonce + "\",uri=\"sip:" + myip + "\",algorithm=MD5,response=\"" + digest + "\"";
+	std::string authorize = "Authorization: Digest username=\"" + username + "\",realm=\"" + realm + "\",nonce=\"" + nonce + "\",uri=\"sip:" + myaddr + "\",algorithm=MD5,response=\"" + digest + "\"";
 
 	std::string call_id_str = call_id.has_value() ? call_id.value() : "";
 
@@ -649,7 +651,7 @@ void sip::send_BYE(const sockaddr_in *const a, const int fd, const std::vector<s
 	}
 
 	std::vector<std::string> hout;
-	create_response_headers(myformat("BYE %s SIP/2.0", number.c_str()), &hout, true, &headers, 0, *a, myip);
+	create_response_headers(myformat("BYE %s SIP/2.0", number.c_str()), &hout, true, &headers, 0, *a, myaddr);
 
 	std::string out = merge(hout, "\r\n") + "\r\n";
 
@@ -972,7 +974,7 @@ bool sip::send_REGISTER(const std::string & call_id, const std::string & authori
 		uint64_t r = 0;
 		get_random((uint8_t *)&r, sizeof r);
 
-		out += "Call-ID: " + myformat("%08lx", r) + "@" + myip + "\r\n";
+		out += "Call-ID: " + myformat("%08lx", r) + "@" + myaddr + "\r\n";
 	}
        	else {
 		out += authorize + "\r\n";
@@ -980,11 +982,11 @@ bool sip::send_REGISTER(const std::string & call_id, const std::string & authori
 		out += "Call-ID: " + call_id + "\r\n";
 	}
 
-	out += "Via: SIP/2.0/UDP " + myip + ":" + myformat("%d", myport) + "\r\n";
+	out += "Via: SIP/2.0/UDP " + myaddr + "\r\n";
 	out += "User-Agent: Happy\r\n";
 	out += "From: <sip:" + username + "@" + tgt_addr + ">;tag=277FD9F0-2607D15D\r\n"; // TODO
 	out += "To: <sip:" + username + "@" + tgt_addr + ">\r\n";
-	out += "Contact: <sip:" + username + "@" + myip + ">;q=1\r\n";
+	out += "Contact: <sip:" + username + "@" + myaddr + ">;q=1\r\n";
 	out += "Allow: INVITE,ACK,OPTIONS,BYE,CANCEL,SUBSCRIBE,NOTIFY,REFER,MESSAGE,INFO,PING\r\n";
 	out += "Expires: 60\r\n";
 	out += "Content-Length: 0\r\n";
