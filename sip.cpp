@@ -107,12 +107,14 @@ sip::sip(const std::string & upstream_sip_server, const std::string & upstream_s
 		std::function<bool(const short *const samples, const size_t n_samples, sip_session_t *const session)> recv_callback,
 		std::function<bool(short **const samples, size_t *const n_samples, sip_session_t *const session)> send_callback,
 		std::function<void(sip_session_t *const session)> end_session_callback,
-		std::function<void(const uint8_t dtmf_code, const bool is_end, const uint8_t volume, sip_session_t *const session)> dtmf_callback) :
+		std::function<void(const uint8_t dtmf_code, const bool is_end, const uint8_t volume, sip_session_t *const session)> dtmf_callback,
+		void *const global_private_data) :
 	upstream_server(upstream_sip_server), username(upstream_sip_user), password(upstream_sip_password),
 	myport(myport),
 	interval(sip_register_interval),
 	samplerate(samplerate),
-	new_session_callback(new_session_callback), recv_callback(recv_callback), send_callback(send_callback), end_session_callback(end_session_callback), dtmf_callback(dtmf_callback)
+	new_session_callback(new_session_callback), recv_callback(recv_callback), send_callback(send_callback), end_session_callback(end_session_callback), dtmf_callback(dtmf_callback),
+	global_private_data(global_private_data)
 {
 	if (myip.has_value())
 		this->myip = myip.value();
@@ -444,6 +446,7 @@ void sip::reply_to_INVITE(const sockaddr_in *const a, const int fd, const std::v
 			ss->call_id        = call_id.value();
 			ss->g722_encoder   = g722_encoder_new(64000, G722_SAMPLE_RATE_8000);
 			ss->g722_decoder   = g722_decoder_new(64000, G722_SAMPLE_RATE_8000);
+			ss->global_private_data = global_private_data;
 
 			// init audio resampler
 			int dummy = 0;

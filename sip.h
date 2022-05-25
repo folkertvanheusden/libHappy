@@ -8,6 +8,7 @@
 #include <stdint.h>
 #include <string>
 #include <thread>
+#include <unistd.h>
 #include <vector>
 #include <netinet/in.h>
 
@@ -63,7 +64,11 @@ typedef struct _sip_session_ {
 	SRC_STATE         *audio_in_resample  { nullptr };
 	SRC_STATE         *audio_out_resample { nullptr };
 
+	// configurable in the callbacks
 	void              *private_data { nullptr };
+
+	// initialized when invoking the constructor
+	void              *global_private_data { nullptr };
 
 	_sip_session_() {
 	}
@@ -92,13 +97,13 @@ private:
 	const std::string password;
 
 	std::string       myip;
-	const int         myport;
+	const int         myport     { 5060 };
 
-	int               sip_fd { -1 };
+	int               sip_fd     { -1 };
 
-	const int interval;
+	const int         interval   { 300 };
 
-	const int samplerate;
+	const int         samplerate { 44100 };
 
 	// called when a new session is started, one can set 'private_data'
 	std::function<bool(sip_session_t *const session, const std::string & from)> new_session_callback;
@@ -114,6 +119,8 @@ private:
 
 	// called when a DTMF event has been received
 	std::function<void(const uint8_t code, const bool is_end, const uint8_t volume, sip_session_t *const session)> dtmf_callback;
+
+	void       *const global_private_data { nullptr };
 
 	std::thread *th1 { nullptr };
 	std::thread *th2 { nullptr };
@@ -161,7 +168,8 @@ public:
 		std::function<bool(const short *const samples, const size_t n_samples, sip_session_t *const session)> recv_callback,
 		std::function<bool(short **const samples, size_t *const n_samples, sip_session_t *const session)> send_callback,
 		std::function<void(sip_session_t *const session)> end_session_callback,
-		std::function<void(const uint8_t dtmf_code, const bool is_end, const uint8_t volume, sip_session_t *const session)> dtmf_callback);
+		std::function<void(const uint8_t dtmf_code, const bool is_end, const uint8_t volume, sip_session_t *const session)> dtmf_callback,
+		void *const global_private_data);
 
 	virtual ~sip();
 };

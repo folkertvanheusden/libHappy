@@ -330,12 +330,12 @@ int main(int argc, char *argv[])
 
 	// filename, loglevel for logging to file, level for logging to screen
 	// levels: debug, info, warning, ll_error
-	setlog("testhappy.log", debug, debug);
+	setlog("/tmp/testhappy.log", warning, warning);
 
-	// remote ip (IP address of upstream asterisk server), my extension-number, my password, my ip, my sip port, samplerate-used-by-callbacks, [callbacks...]
+	// remote ip (IP address of upstream asterisk server), my extension-number, my password, my ip, my sip port, samplerate-used-by-callbacks, [callbacks...], pointer to global private data (or nullptr)
 	// note: 'my ip' is only required when the library cannot figure out what IP address to use to contact the SIP server. This can happen when there's a NAT router in between for example.
-	sip s("192.168.64.1", "9999", "1234", { }, 5060, 60, 44100, cb_new_session, cb_recv, cb_send, cb_end_session, cb_dtmf);
-	//sip s("10.208.11.13", "3535", "1234", "10.208.42.97", 5060, 60, 44100, cb_new_session, cb_recv, cb_send, cb_end_session, cb_dtmf);
+	//sip s("192.168.64.1", "9999", "1234", { }, 5060, 60, 44100, cb_new_session, cb_recv, cb_send, cb_end_session, cb_dtmf, nullptr);
+	sip s("10.208.11.13", "3535", "1234", { }, 5060, 60, 44100, cb_new_session, cb_recv, cb_send, cb_end_session, cb_dtmf, nullptr);
 
 	// do whatever you like here
 	pause();
