@@ -110,7 +110,6 @@ sip::sip(const std::string & upstream_sip_server, const std::string & upstream_s
 		std::function<void(const uint8_t dtmf_code, const bool is_end, const uint8_t volume, sip_session_t *const session)> dtmf_callback,
 		void *const global_private_data) :
 	upstream_server(upstream_sip_server), username(upstream_sip_user), password(upstream_sip_password),
-	myport(myport),
 	interval(sip_register_interval),
 	samplerate(samplerate),
 	new_session_callback(new_session_callback), recv_callback(recv_callback), send_callback(send_callback), end_session_callback(end_session_callback), dtmf_callback(dtmf_callback),
@@ -129,11 +128,17 @@ sip::sip(const std::string & upstream_sip_server, const std::string & upstream_s
 		DOLOG(debug, "Local IP address: %s\n", this->myip.c_str());
 	}
 
-	myaddr = this->myip + myformat(":%d", myport);
+	sip_fd = create_datagram_socket(myport);
+
+	if (myport == 0) {
+		this->myport = get_local_port(sip_fd);
+
+		DOLOG(debug, "Local port number: %d\n", this->myport);
+	}
+
+	myaddr = this->myip + myformat(":%d", this->myport);
 
 	th1 = new std::thread(&sip::session_cleaner, this);  // session cleaner
-
-	sip_fd = create_datagram_socket(myport);
 
 	th2 = new std::thread(&sip::register_thread, this);  // keep-alive to upstream SIP
 

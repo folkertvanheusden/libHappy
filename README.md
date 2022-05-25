@@ -50,9 +50,9 @@ You instantiate the 'sip' class with the following parameters
 * upstream SIP server user: username of the SIP account you want to use
 * upstream SIP server password: password of the SIP account you want to use
 
-* local IP address: this is only required if there is a NAT router between libhappy and the target sip-server or when the local IP address cannot automatically be determined
+* local IP address: this is only required if there is a NAT router between libhappy and the target sip-server or when the local IP address cannot automatically be determined, else use { }
 
-* local port: UDP port on which the library will listen for incoming SIP packets 
+* local port: UDP port on which the library will listen for incoming SIP packets. normally you would set this to 0 for automatically choose one.
 
 * register interval: how often to login/notify the SIP server that we're ready to use the service
 
