@@ -63,22 +63,28 @@ void cb_dtmf(const uint8_t dtmf_code, const bool is_end, const uint8_t volume, s
 	MpdObj         *mpd = reinterpret_cast<MpdObj *>(session->global_private_data);
 
 	if (is_end && dtmf_code != p->prev_key) {
+		int rc = -1;
 
 		if (dtmf_code == 4) {  // previous
-			mpd_player_prev(mpd);
+			if ((rc = mpd_player_prev(mpd)) != MPD_OK)
+				printf("mpd_player_prev failed: %d\n", rc);
 		}
 		else if (dtmf_code == 5) {  // pause / unpause
 			int state = mpd_player_get_state(mpd);
 
 			if (state == MPD_STATUS_STATE_PAUSE || state == MPD_STATUS_STATE_STOP)
-				mpd_player_play(mpd);
+				rc = mpd_player_play(mpd);
 			else if (state == MPD_STATUS_STATE_PLAY)
-				mpd_player_pause(mpd);
+				rc = mpd_player_pause(mpd);
 			else
 				printf("Unknown MPD state: %d\n", state);
+
+			if (rc != MPD_OK)
+				printf("mpd_player_play/pause failed: %d\n", rc);
 		}
 		else if (dtmf_code == 6) {  // next
-			mpd_player_next(mpd);
+			if ((rc = mpd_player_next(mpd)) != MPD_OK)
+				printf("mpd_player_next failed: %d\n", rc);
 		}
 		else {
 			printf("Ignoring DTMF code %d\n", dtmf_code);
@@ -98,7 +104,20 @@ int main(int argc, char *argv[])
 
 	setlog("/tmp/testhappy.log", debug, debug);
 
-	MpdObj *mpd = mpd_new(const_cast<char *>("spacesound.vm.nurd.space"), 6600, nullptr);
+	MpdObj *mpd = mpd_new(const_cast<char *>("spacesound.vm.nurd.space"), 6600, "");
+
+	if (mpd == nullptr) {
+		fprintf(stderr, "Cannot setup MPD session\n");
+
+		return 1;
+	}
+
+	int rc = mpd_connect(mpd);
+	if (rc != MPD_OK) {
+		fprintf(stderr, "Cannot connect to MPD server: %d\n", rc);
+
+		return 1;
+	}
 
 	sip s("10.208.11.13", "3737", "1234", { }, 5061, 60, 44100, cb_new_session, cb_recv, cb_send, cb_end_session, cb_dtmf, mpd);
 
