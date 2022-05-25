@@ -131,7 +131,7 @@ sip::sip(const std::string & upstream_sip_server, const std::string & upstream_s
 
 	th1 = new std::thread(&sip::session_cleaner, this);  // session cleaner
 
-	sip_fd = create_datagram_socket(5060);
+	sip_fd = create_datagram_socket(myport);
 
 	th2 = new std::thread(&sip::register_thread, this);  // keep-alive to upstream SIP
 
