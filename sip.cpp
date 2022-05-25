@@ -304,8 +304,7 @@ void sip::reply_to_OPTIONS(const sockaddr_in *const a, const int fd, const std::
 	content.push_back("c=IN " + proto + " " + sockaddr_to_str(*a).c_str()); // my ip
 	content.push_back("s=libHappy");
 	content.push_back("t=0 0");
-	// 1234 could be allocated but as this is send-
-	// only, it is not relevant  <--- TODO this comment needs to be re-evaluated
+	// 1234 is (should) not be relevant; real port number is returned as a reply to INVITE
 	content.push_back("m=audio 1234 RTP/AVP 0 8 9 11");
 	content.push_back("a=sendrecv");
 	content.push_back(myformat("a=rtpmap:0 PCMU/%u", samplerate));
@@ -733,6 +732,8 @@ void sip::wait_for_audio(sip_session_t *const ss)
 {
 	DOLOG(info, "sip::wait_for_audio: audio receive handler thread started\n");
 
+	// TODO: check if source address is expected
+
 	// wait for packets on ss->fd
 	// send them to audio_input()
 	struct pollfd fds[] { { ss->fd, POLLIN, 0 } };
@@ -792,7 +793,7 @@ void sip::session(const struct sockaddr_in tgt_addr, const int tgt_rtp_port, sip
 	uint32_t t      = 0;
 
 	uint32_t ssrc   = 0;
-	get_random((uint8_t *)&ssrc, sizeof ssrc);
+	get_random(reinterpret_cast<uint8_t *>(&ssrc), sizeof ssrc);
 
 	for(;!stop_flag && !ss->stop_flag;) {
 		short *samples = nullptr;
@@ -832,24 +833,24 @@ void sip::session(const struct sockaddr_in tgt_addr, const int tgt_rtp_port, sip
 // http://dystopiancode.blogspot.com/2012/02/pcm-law-and-u-law-companding-algorithms.html
 static int16_t decode_alaw(int8_t number)
 {
-	uint8_t sign = 0x00;
+	uint8_t sign     = 0x00;
 	uint8_t position = 0;
-	int16_t decoded = 0;
+	int16_t decoded  = 0;
 
-	number^=0x55;
+	number ^= 0x55;
 
-	if (number&0x80) {
-		number&=~(1<<7);
-		sign = -1;
+	if (number & 0x80) {
+		number &= ~(1<<7);
+		sign    = -1;
 	}
 
 	position = ((number & 0xF0) >>4) + 4;
 
-	if (position!=4) {
-		decoded = ((1<<position)|((number&0x0F)<<(position-4)) |(1<<(position-5)));
+	if (position != 4) {
+		decoded = ((1 << position) | ((number & 0x0F) << (position - 4)) |(1 << (position - 5)));
 	}
 	else {
-		decoded = (number<<1)|1;
+		decoded = (number << 1) | 1;
 	}
 
 	return sign == 0 ? decoded:-decoded;
@@ -871,7 +872,7 @@ static int16_t decode_mulaw(int8_t number)
 
 	position = ((number & 0xF0) >> 4) + 5;
 
-	decoded = ((1 << position) | ((number & 0x0F) << (position - 4))
+	decoded  = ((1 << position) | ((number & 0x0F) << (position - 4))
 			| (1 << (position - 5))) - MULAW_BIAS;
 
 	return sign == 0 ? decoded : -decoded;
@@ -985,9 +986,9 @@ bool sip::send_REGISTER(const std::string & call_id, const std::string & authori
 		work     = work.substr(0, colon);
 	}
 
-	std::string tgt_addr         = work.c_str();
+	std::string tgt_addr = work.c_str();
 
-	std::string out = "REGISTER sip:" + tgt_addr + " SIP/2.0\r\n";
+	std::string out      = "REGISTER sip:" + tgt_addr + " SIP/2.0\r\n";
 
 	if (authorize.empty()) {
 		out += "CSeq: 1 REGISTER\r\n";
