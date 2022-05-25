@@ -107,7 +107,7 @@ sip::sip(const std::string & upstream_sip_server, const std::string & upstream_s
 		std::function<bool(const short *const samples, const size_t n_samples, sip_session_t *const session)> recv_callback,
 		std::function<bool(short **const samples, size_t *const n_samples, sip_session_t *const session)> send_callback,
 		std::function<void(sip_session_t *const session)> end_session_callback,
-		std::function<void(const uint8_t dtmf_code, const bool is_end, const uint8_t volume, sip_session_t *const session)> dtmf_callback,
+		std::function<bool(const uint8_t dtmf_code, const bool is_end, const uint8_t volume, sip_session_t *const session)> dtmf_callback,
 		void *const global_private_data) :
 	upstream_server(upstream_sip_server), username(upstream_sip_user), password(upstream_sip_password),
 	interval(sip_register_interval),
@@ -137,6 +137,8 @@ sip::sip(const std::string & upstream_sip_server, const std::string & upstream_s
 	}
 
 	myaddr = this->myip + myformat(":%d", this->myport);
+
+	tag    = random_hex(16);
 
 	th1 = new std::thread(&sip::session_cleaner, this);  // session cleaner
 
@@ -172,15 +174,18 @@ void sip::sip_listener()
 			break;
 
 		if (rc == 1) {
-			uint8_t     buffer[1600] { 0 };
+			uint8_t     buffer[9999] { 0 };  // room for (most) jumbo frame-sizes
 
 			sockaddr_in addr         { 0 };
 			socklen_t   addr_len     { sizeof addr };
 
-			ssize_t recv_rc = recvfrom(sip_fd, buffer, sizeof buffer, 0, reinterpret_cast<struct sockaddr *>(&addr), &addr_len);
+			ssize_t recv_rc = recvfrom(sip_fd, buffer, sizeof buffer - 1, 0, reinterpret_cast<struct sockaddr *>(&addr), &addr_len);
 
-			if (recv_rc > 0)
+			if (recv_rc > 0) {
+				DOLOG(debug, "%s", buffer);
+
 				sip_input(&addr, sip_fd, buffer, recv_rc);
+			}
 		}
 	}
 }
@@ -291,6 +296,8 @@ static void create_response_headers(const std::string & request, std::vector<std
 
 bool sip::transmit_packet(const sockaddr_in *const a, const int fd, const uint8_t *const data, const size_t data_size)
 {
+	DOLOG(debug, "%s", std::string(reinterpret_cast<const char *>(data), data_size).c_str());
+
 	return sendto(fd, data, data_size, 0, reinterpret_cast<const struct sockaddr *>(a), sizeof *a) == ssize_t(data_size);
 }
 
@@ -304,8 +311,7 @@ void sip::reply_to_OPTIONS(const sockaddr_in *const a, const int fd, const std::
 	content.push_back("c=IN " + proto + " " + sockaddr_to_str(*a).c_str()); // my ip
 	content.push_back("s=libHappy");
 	content.push_back("t=0 0");
-	// 1234 could be allocated but as this is send-
-	// only, it is not relevant  <--- TODO this comment needs to be re-evaluated
+	// 1234 is (should) not be relevant; real port number is returned as a reply to INVITE
 	content.push_back("m=audio 1234 RTP/AVP 0 8 9 11");
 	content.push_back("a=sendrecv");
 	content.push_back(myformat("a=rtpmap:0 PCMU/%u", samplerate));
@@ -328,17 +334,31 @@ void sip::reply_to_OPTIONS(const sockaddr_in *const a, const int fd, const std::
 
 codec_t select_schema(const std::vector<std::string> *const body, const int max_rate)
 {
-	codec_t best { 255, "", "", -1, -1 };
+	codec_t                  best { 255, "", "", -1, -1 };
 
-	int     frame_duration = 20;
+	int                      frame_duration = 20;
 
-	for(std::string line : *body) {
-		// printf("%s\n", line.c_str());
+	std::vector<std::string> order;
+
+	// id, (org-)name, rate
+	std::map<int, std::pair<std::string, int> > options;
+
+	for(auto & line : *body) {
+		DOLOG(debug, "SPD: %s\n", line.c_str());
 
 		if (line.substr(0, 11) == "a=maxptime:") {
 			frame_duration = std::min(40, atoi(line.substr(11).c_str()));
 
 			DOLOG(debug, "select_schema: frame duration set to %dms\n", frame_duration);
+
+			continue;
+		}
+
+		if (line.substr(0, 7) == "m=audio") {
+			order = split(line, " ");
+
+			// "m=audio 19206 RTP/AVP" are not of interest
+			order.erase(order.begin(), order.begin() + 3);
 
 			continue;
 		}
@@ -358,33 +378,35 @@ codec_t select_schema(const std::vector<std::string> *const body, const int max_
 		if (slash == std::string::npos)
 			continue;
 
-		uint8_t id = atoi(pars.substr(0, lspace).c_str());
+		uint8_t     id   = atoi(pars.substr(0, lspace).c_str());
 
-		std::string name = str_tolower(type_rate.substr(0, slash));
-		int rate = atoi(type_rate.substr(slash + 1).c_str());
+		std::string name = type_rate.substr(0, slash);
+		int         rate = atoi(type_rate.substr(slash + 1).c_str());
 
-		// TODO pick best from m=audio order
-		bool pick = false;
+		options.insert({ id, { name, rate } });
+	}
 
-		if (rate >= best.rate && (name == "l16" || name == "alaw" || name == "pcma" || name == "ulaw" || name == "pcmu")) {
-			if (abs(rate - max_rate) < abs(rate - best.rate) || best.rate == -1)
-				pick = true;
-		}
-		else if (rate == best.rate) {
-			if (name == "l16")
-				pick = true;
-			else if (best.id == 255)
-				pick = true;
-		}
-		else if (name == "g722") {
-			pick = true;
-		}
+	for(auto & order_element : order) {
+		int  order_id    = atoi(order_element.c_str());
 
-		if (pick) {
-			best.rate = rate;
-			best.id = id;
-			best.name = name;
-			best.org_name = type_rate.substr(0, slash);
+		auto it          = options.find(order_id);
+
+		// might be missing due to bugs in the other end
+		if (it == options.end())
+			continue;
+
+		std::string name = str_tolower(it->second.first);
+
+		if (name == "pcma" || name == "alaw" ||
+		    name == "pcmu" || name == "ulaw" ||
+		    name == "l16"  ||
+		    name == "g722") {
+			best.id       = order_id;
+			best.name     = name;
+			best.org_name = it->second.first;
+			best.rate     = it->second.second;
+
+			break;
 		}
 	}
 
@@ -717,6 +739,8 @@ void sip::wait_for_audio(sip_session_t *const ss)
 {
 	DOLOG(info, "sip::wait_for_audio: audio receive handler thread started\n");
 
+	// TODO: check if source address is expected
+
 	// wait for packets on ss->fd
 	// send them to audio_input()
 	struct pollfd fds[] { { ss->fd, POLLIN, 0 } };
@@ -740,10 +764,18 @@ void sip::wait_for_audio(sip_session_t *const ss)
 				      	// 101 is statically assigned (in this library) to "telephone-event" rtp-type
 					dolog(debug, "TELEPHONE EVENT %d, %02x\n", buffer[12], buffer[13]);
 
-					dtmf_callback(buffer[12], !!(buffer[13] & 128), buffer[13] & 63, ss);
+					if (!dtmf_callback(buffer[12], !!(buffer[13] & 128), buffer[13] & 63, ss)) {
+						ss->stop_flag = true;
+
+						break;
+					}
 				}
 				else {
-					audio_input(buffer, recv_rc, ss);
+					if (!audio_input(buffer, recv_rc, ss)) {
+						ss->stop_flag = true;
+
+						break;
+					}
 				}
 			}
 		}
@@ -776,7 +808,7 @@ void sip::session(const struct sockaddr_in tgt_addr, const int tgt_rtp_port, sip
 	uint32_t t      = 0;
 
 	uint32_t ssrc   = 0;
-	get_random((uint8_t *)&ssrc, sizeof ssrc);
+	get_random(reinterpret_cast<uint8_t *>(&ssrc), sizeof ssrc);
 
 	for(;!stop_flag && !ss->stop_flag;) {
 		short *samples = nullptr;
@@ -816,24 +848,24 @@ void sip::session(const struct sockaddr_in tgt_addr, const int tgt_rtp_port, sip
 // http://dystopiancode.blogspot.com/2012/02/pcm-law-and-u-law-companding-algorithms.html
 static int16_t decode_alaw(int8_t number)
 {
-	uint8_t sign = 0x00;
+	uint8_t sign     = 0x00;
 	uint8_t position = 0;
-	int16_t decoded = 0;
+	int16_t decoded  = 0;
 
-	number^=0x55;
+	number ^= 0x55;
 
-	if (number&0x80) {
-		number&=~(1<<7);
-		sign = -1;
+	if (number & 0x80) {
+		number &= ~(1<<7);
+		sign    = -1;
 	}
 
 	position = ((number & 0xF0) >>4) + 4;
 
-	if (position!=4) {
-		decoded = ((1<<position)|((number&0x0F)<<(position-4)) |(1<<(position-5)));
+	if (position != 4) {
+		decoded = ((1 << position) | ((number & 0x0F) << (position - 4)) |(1 << (position - 5)));
 	}
 	else {
-		decoded = (number<<1)|1;
+		decoded = (number << 1) | 1;
 	}
 
 	return sign == 0 ? decoded:-decoded;
@@ -855,14 +887,16 @@ static int16_t decode_mulaw(int8_t number)
 
 	position = ((number & 0xF0) >> 4) + 5;
 
-	decoded = ((1 << position) | ((number & 0x0F) << (position - 4))
+	decoded  = ((1 << position) | ((number & 0x0F) << (position - 4))
 			| (1 << (position - 5))) - MULAW_BIAS;
 
 	return sign == 0 ? decoded : -decoded;
 }
 
-void sip::audio_input(const uint8_t *const payload, const size_t payload_size, sip_session_t *const ss)
+bool sip::audio_input(const uint8_t *const payload, const size_t payload_size, sip_session_t *const ss)
 {
+	bool ok = false;
+
 	ss->latest_pkt = get_us();
 
 	if (ss->schema.name == "alaw" || ss->schema.name == "pcma" || ss->schema.name == "ulaw" || ss->schema.name == "pcmu") {  // a-law and mu-law
@@ -884,7 +918,8 @@ void sip::audio_input(const uint8_t *const payload, const size_t payload_size, s
 			int    result_n = 0;
 			resample(ss->audio_in_resample, temp, ss->schema.rate, n_samples, &result, samplerate, &result_n);
 
-			recv_callback(result, result_n, ss);
+			if (recv_callback(result, result_n, ss))
+				ok = true;
 
 			delete [] result;
 
@@ -903,7 +938,8 @@ void sip::audio_input(const uint8_t *const payload, const size_t payload_size, s
 			int    result_n = 0;
 			resample(ss->audio_in_resample, temp, 8000, n_samples, &result, samplerate, &result_n);
 
-			recv_callback(result, result_n, ss);
+			if (recv_callback(result, result_n, ss))
+				ok = true;
 
 			delete [] result;
 
@@ -920,7 +956,8 @@ void sip::audio_input(const uint8_t *const payload, const size_t payload_size, s
 			int    result_n = 0;
 			resample(ss->audio_in_resample, samples, ss->schema.rate, n_samples, &result, samplerate, &result_n);
 
-			recv_callback(result, result_n, ss);
+			if (recv_callback(result, result_n, ss))
+				ok = true;
 
 			delete [] result;
 		}
@@ -928,6 +965,11 @@ void sip::audio_input(const uint8_t *const payload, const size_t payload_size, s
 	else {
 		DOLOG(warning, "SIP: unsupported incoming schema %s/%d\n", ss->schema.name.c_str(), ss->schema.rate);
 	}
+
+	if (!ok)
+		DOLOG(warning, "SIP: session termination requested by recv_callback or not being able to decode rtp data\n");
+
+	return ok;
 }
 
 void sip::session_cleaner()
@@ -969,9 +1011,9 @@ bool sip::send_REGISTER(const std::string & call_id, const std::string & authori
 		work     = work.substr(0, colon);
 	}
 
-	std::string tgt_addr         = work.c_str();
+	std::string tgt_addr = work.c_str();
 
-	std::string out = "REGISTER sip:" + tgt_addr + " SIP/2.0\r\n";
+	std::string out      = "REGISTER sip:" + tgt_addr + " SIP/2.0\r\n";
 
 	if (authorize.empty()) {
 		out += "CSeq: 1 REGISTER\r\n";
@@ -988,10 +1030,10 @@ bool sip::send_REGISTER(const std::string & call_id, const std::string & authori
 	}
 
 	out += "Via: SIP/2.0/UDP " + myaddr + "\r\n";
-	out += "User-Agent: Happy\r\n";
-	out += "From: <sip:" + username + "@" + tgt_addr + ">;tag=277FD9F0-2607D15D\r\n"; // TODO
-	out += "To: <sip:" + username + "@" + tgt_addr + ">\r\n";
-	out += "Contact: <sip:" + username + "@" + myaddr + ">;q=1\r\n";
+	out += "User-Agent: libHappy\r\n";
+	out += "From: <sip:"    + username + "@" + tgt_addr + ">;tag=" + tag + "\r\n";
+	out += "To: <sip:"      + username + "@" + tgt_addr + ">\r\n";
+	out += "Contact: <sip:" + username + "@" + myaddr   + ">;q=1\r\n";
 	out += "Allow: INVITE,ACK,OPTIONS,BYE,CANCEL,SUBSCRIBE,NOTIFY,REFER,MESSAGE,INFO,PING\r\n";
 	out += "Expires: 60\r\n";
 	out += "Content-Length: 0\r\n";

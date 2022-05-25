@@ -10,6 +10,7 @@ uint64_t get_ms();
 void myusleep(uint64_t us);
 
 void get_random(uint8_t *tgt, size_t n);
+std::string random_hex(const size_t n);
 
 std::string myformat(const char *const fmt, ...);
 std::vector<std::string> split(std::string in, std::string splitter);

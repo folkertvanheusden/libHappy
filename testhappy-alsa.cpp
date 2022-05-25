@@ -196,8 +196,6 @@ bool cb_recv(const short *const samples, const size_t n_samples, sip_session_t *
 
 	double  gain_n_samples = 300.0 / session->schema.frame_duration; // calculate fragment over 300ms
 
-	printf("duration: %d, blen: %d\n", session->schema.frame_duration, p->buffer_length);
-
 	// update moving average for gain
 	double avg = 0;
 
@@ -218,8 +216,6 @@ bool cb_recv(const short *const samples, const size_t n_samples, sip_session_t *
 	int err = snd_pcm_writei(p->play_handle, samples, n_samples);
 
 	if (err == -EPIPE) {
-		printf("EPIPE\n");
-
 		snd_pcm_prepare(p->play_handle);
 	}
 	else if (err < 0) {
@@ -240,8 +236,6 @@ bool cb_send(short **const samples, size_t *const n_samples, sip_session_t *cons
 	if (p->rec_th == nullptr) {
 		p->rec_th = new std::thread([p, session]() {
 			while(!*p->stop_flag) {
-				uint64_t start = get_us();
-
 				short *buffer = new short[p->buffer_length];
 
 				int err = snd_pcm_readi(p->capture_handle, buffer, p->buffer_length);
@@ -253,10 +247,6 @@ bool cb_send(short **const samples, size_t *const n_samples, sip_session_t *cons
 				p->buffers.push(buffer);
 
 				p->buffer_cv.notify_all();
-
-				uint64_t fin = get_us();
-
-				printf("record audio: %lu\n", fin - start);
 			}
 		});
 	}
@@ -264,8 +254,6 @@ bool cb_send(short **const samples, size_t *const n_samples, sip_session_t *cons
 	std::unique_lock<std::mutex> lck(p->buffer_lock);
 
 	using namespace std::chrono_literals;
-
-	uint64_t start = get_us();
 
 	while(p->buffers.empty()) {
 		p->buffer_cv.wait_for(lck, 500ms);
@@ -276,10 +264,6 @@ bool cb_send(short **const samples, size_t *const n_samples, sip_session_t *cons
 			return false;
 		}
 	}
-
-	uint64_t fin = get_us();
-
-	printf("wait for audio: %lu\n", fin - start);
 
 	*samples   = p->buffers.front();
 	p->buffers.pop();
@@ -315,9 +299,11 @@ void cb_end_session(sip_session_t *const session)
 	delete p;
 }
 
-void cb_dtmf(const uint8_t dtmf_code, const bool is_end, const uint8_t volume, sip_session_t *const session)
+bool cb_dtmf(const uint8_t dtmf_code, const bool is_end, const uint8_t volume, sip_session_t *const session)
 {
 	printf("DTMF pressed: %d\n", dtmf_code);
+
+	return true;
 }
 
 void sigh(int sig)
@@ -330,12 +316,12 @@ int main(int argc, char *argv[])
 
 	// filename, loglevel for logging to file, level for logging to screen
 	// levels: debug, info, warning, ll_error
-	setlog("/tmp/testhappy.log", warning, warning);
+	setlog("/tmp/testhappy.log", warning, debug);
 
 	// remote ip (IP address of upstream asterisk server), my extension-number, my password, my ip, my sip port, samplerate-used-by-callbacks, [callbacks...], pointer to global private data (or nullptr)
 	// note: 'my ip' is only required when the library cannot figure out what IP address to use to contact the SIP server. This can happen when there's a NAT router in between for example.
-	//sip s("192.168.64.1", "9999", "1234", { }, 5060, 60, 44100, cb_new_session, cb_recv, cb_send, cb_end_session, cb_dtmf, nullptr);
-	sip s("10.208.11.13", "3535", "1234", { }, 5060, 60, 44100, cb_new_session, cb_recv, cb_send, cb_end_session, cb_dtmf, nullptr);
+	sip s("192.168.64.1", "9999", "1234", { }, 5060, 60, 44100, cb_new_session, cb_recv, cb_send, cb_end_session, cb_dtmf, nullptr);
+//	sip s("10.208.11.13", "3535", "1234", { }, 5060, 60, 44100, cb_new_session, cb_recv, cb_send, cb_end_session, cb_dtmf, nullptr);
 
 	// do whatever you like here
 	pause();

@@ -69,6 +69,22 @@ void get_random(uint8_t *tgt, size_t n)
 	}
 }
 
+std::string random_hex(const size_t n)
+{
+	uint8_t *temp = new uint8_t[n];
+
+	get_random(temp, n);
+
+	std::string out;
+
+	for(size_t i=0; i<n; i++)
+		out += myformat("%02x", temp[i]);
+
+	delete [] temp;
+
+	return out;
+}
+
 std::vector<std::string> split(std::string in, std::string splitter)
 {
 	std::vector<std::string> out;

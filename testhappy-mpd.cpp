@@ -54,7 +54,7 @@ void cb_end_session(sip_session_t *const session)
 	delete p;
 }
 
-void cb_dtmf(const uint8_t dtmf_code, const bool is_end, const uint8_t volume, sip_session_t *const session)
+bool cb_dtmf(const uint8_t dtmf_code, const bool is_end, const uint8_t volume, sip_session_t *const session)
 {
 	printf("DTMF pressed: %d\n", dtmf_code);
 
@@ -92,6 +92,8 @@ void cb_dtmf(const uint8_t dtmf_code, const bool is_end, const uint8_t volume, s
 
 		p->prev_key = dtmf_code;
 	}
+
+	return true;
 }
 
 void sigh(int sig)
@@ -104,7 +106,7 @@ int main(int argc, char *argv[])
 
 	setlog("/tmp/testhappy.log", debug, debug);
 
-	MpdObj *mpd = mpd_new(const_cast<char *>("spacesound.vm.nurd.space"), 6600, "");
+	MpdObj *mpd = mpd_new(const_cast<char *>("spacesound.vm.nurd.space"), 6600, const_cast<char *>(""));
 
 	if (mpd == nullptr) {
 		fprintf(stderr, "Cannot setup MPD session\n");
