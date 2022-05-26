@@ -52,11 +52,6 @@ target_link_libraries(happy ${SAMPLERATE_LIBRARIES})
 target_include_directories(happy PUBLIC ${SAMPLERATE_INCLUDE_DIRS})
 target_compile_options(happy PUBLIC ${SAMPLERATE_CFLAGS_OTHER})
 
-pkg_check_modules(SNDFILE REQUIRED sndfile)
-target_link_libraries(happy ${SNDFILE_LIBRARIES})
-target_include_directories(happy PUBLIC ${SNDFILE_INCLUDE_DIRS})
-target_compile_options(happy PUBLIC ${SNDFILE_CFLAGS_OTHER})
-
 pkg_check_modules(ALSA REQUIRED alsa)
 target_link_libraries(testhappy-alsa ${ALSA_LIBRARIES})
 target_include_directories(testhappy-alsa PUBLIC ${ALSA_INCLUDE_DIRS})
