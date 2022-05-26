@@ -17,13 +17,13 @@
 
 static void resample(SRC_STATE *const state, const short *const in, const int in_rate, const int n_samples, short **const out, const int out_rate, int *const out_n_samples)
 {
-	float *in_float = new float[n_samples];
+	float *in_float  = new float[n_samples]();
 	src_short_to_float_array(in, in_float, n_samples);
 
-	double ratio = out_rate / double(in_rate);
+	double ratio     = out_rate / double(in_rate);
 
 	size_t n_out_allocated = ceil(n_samples * ratio);
-	float *out_float = new float[n_out_allocated];
+	float *out_float = new float[n_out_allocated]();
 
 	SRC_DATA sd { 0 };
 	sd.data_in           = in_float;
@@ -41,7 +41,7 @@ static void resample(SRC_STATE *const state, const short *const in, const int in
 
 	*out_n_samples = sd.output_frames_gen;
 
-	*out = new short[*out_n_samples];
+	*out = new short[*out_n_samples]();
 	src_float_to_short_array(out_float, *out, *out_n_samples);
 
 	delete [] out_float;
@@ -328,7 +328,7 @@ void sip::reply_to_OPTIONS(const sockaddr_in *const a, const int fd, const std::
 
 	std::string out = headers_out + "\r\n" + content_out;
 
-	if (transmit_packet(a, fd, (const uint8_t *)out.c_str(), out.size()) == false)
+	if (transmit_packet(a, fd, reinterpret_cast<const uint8_t *>(out.c_str()), out.size()) == false)
 		DOLOG(info, "sip::reply_to_OPTIONS: transmit failed");
 }
 
@@ -502,7 +502,7 @@ void sip::reply_to_INVITE(const sockaddr_in *const a, const int fd, const std::v
 				std::string out = headers_out + "\r\n" + content_out;
 
 				// send INVITE reply
-				if (transmit_packet(a, fd, (const uint8_t *)out.c_str(), out.size()) == false) {
+				if (transmit_packet(a, fd, reinterpret_cast<const uint8_t *>(out.c_str()), out.size()) == false) {
 					DOLOG(info, "sip::reply_to_INVITE: ok transmit failed");
 
 					end_session_callback(ss);  // cannot transmit, session ended
@@ -527,7 +527,7 @@ void sip::reply_to_INVITE(const sockaddr_in *const a, const int fd, const std::v
 				std::string out = headers_out + "\r\n" + content_out;
 
 				// send rejection reply
-				if (transmit_packet(a, fd, (const uint8_t *)out.c_str(), out.size()) == false)
+				if (transmit_packet(a, fd, reinterpret_cast<const uint8_t *>(out.c_str()), out.size()) == false)
 					DOLOG(info, "sip::reply_to_INVITE: rejection transmit failed");
 
 				delete ss;
@@ -543,7 +543,7 @@ void sip::send_ACK(const sockaddr_in *const a, const int fd, const std::vector<s
 
 	std::string out = merge(hout, "\r\n");
 
-	if (transmit_packet(a, fd, (const uint8_t *)out.c_str(), out.size()) == false)
+	if (transmit_packet(a, fd, reinterpret_cast<const uint8_t *>(out.c_str()), out.size()) == false)
 		DOLOG(info, "sip::send_ACK: transmit failed");
 }
 
@@ -682,7 +682,7 @@ void sip::send_BYE(const sockaddr_in *const a, const int fd, const std::vector<s
 
 	std::string out = merge(hout, "\r\n") + "\r\n";
 
-	if (transmit_packet(a, fd, (const uint8_t *)out.c_str(), out.size()) == false)
+	if (transmit_packet(a, fd, reinterpret_cast<const uint8_t *>(out.c_str()), out.size()) == false)
 		DOLOG(info, "sip::send_BYTE: transmit failed");
 }
 
@@ -785,7 +785,7 @@ void sip::wait_for_audio(sip_session_t *const ss)
 void generate_beep(const double f, const double duration, const int samplerate, short **const beep, size_t *const beep_n)
 {
 	*beep_n = samplerate * duration;
-	*beep = new short[*beep_n];
+	*beep   = new short[*beep_n]();
 
 	double mul = 2.0 * M_PI * f;
 
@@ -903,7 +903,7 @@ bool sip::audio_input(const uint8_t *const payload, const size_t payload_size, s
 		int n_samples = payload_size - 12;
 
 		if (n_samples > 0) {
-			short *temp = new short[n_samples];
+			short *temp = new short[n_samples]();
 
 			if (ss->schema.name == "alaw" || ss->schema.name == "pcma") {
 				for(int i=0; i<n_samples; i++)
@@ -930,7 +930,7 @@ bool sip::audio_input(const uint8_t *const payload, const size_t payload_size, s
 		int n_samples = (payload_size - 12) / 2;
 
 		if (n_samples > 0) {
-			short *temp = new short[n_samples];
+			short *temp = new short[n_samples]();
 
 			g722_decode(ss->g722_decoder, &payload[12], n_samples, temp);
 
@@ -1044,7 +1044,7 @@ bool sip::send_REGISTER(const std::string & call_id, const std::string & authori
         a.sin_port        = htons(tgt_port);
         a.sin_addr.s_addr = inet_addr(tgt_addr.c_str());
 
-	return transmit_packet(&a, sip_fd, (const uint8_t *)out.c_str(), out.size());
+	return transmit_packet(&a, sip_fd, reinterpret_cast<const uint8_t *>(out.c_str()), out.size());
 }
 
 // register at upstream server
