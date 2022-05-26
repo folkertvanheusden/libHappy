@@ -579,9 +579,9 @@ void sip::reply_to_UNAUTHORIZED(const std::vector<std::string> *const headers)
 		return;
 	}
 
-	auto call_id = find_header(headers, "Call-ID");
+	auto        call_id = find_header(headers, "Call-ID");
 
-	std::string work = replace(str_wa.value(), ",", " ");
+	std::string work    = replace(str_wa.value(), ",", " ");
 
 	std::vector<std::string> parameters = split(work, " ");
 
@@ -590,20 +590,20 @@ void sip::reply_to_UNAUTHORIZED(const std::vector<std::string> *const headers)
 	if (str_da.has_value())
 		digest_alg = str_da.value();
 
-	std::string realm = "";
+	std::string realm;
 	auto str_realm = find_header(&parameters, "realm", "=");
 	if (str_realm.has_value())
 		realm = replace(str_realm.value(), "\"", "");
 
-	std::string nonce = "";
+	std::string nonce;
 	auto str_nonce = find_header(&parameters, "nonce", "=");
 	if (str_nonce.has_value())
 		nonce = replace(str_nonce.value(), "\"", "");
 
-	std::string a1 = md5(username + ":" + realm + ":" + password);
-	std::string a2 = md5("REGISTER:sip:" + myaddr);
+	std::string a1        = md5(username + ":" + realm + ":" + password);
+	std::string a2        = md5("REGISTER:sip:" + myaddr);
 
-	std::string digest = md5(a1 + ":" + nonce + ":" + a2);
+	std::string digest    = md5(a1 + ":" + nonce + ":" + a2);
 
 	std::string authorize = "Authorization: Digest username=\"" + username + "\",realm=\"" + realm + "\",nonce=\"" + nonce + "\",uri=\"sip:" + myaddr + "\",algorithm=MD5,response=\"" + digest + "\"";
 
