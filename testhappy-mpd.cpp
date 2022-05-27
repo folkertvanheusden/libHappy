@@ -93,6 +93,9 @@ bool cb_dtmf(const uint8_t dtmf_code, const bool is_end, const uint8_t volume, s
 		p->prev_key = dtmf_code;
 	}
 
+	if (!is_end)
+		p->prev_key = 255;
+
 	return true;
 }
 
@@ -121,7 +124,7 @@ int main(int argc, char *argv[])
 		return 1;
 	}
 
-	sip s("10.208.11.13", "3737", "1234", { }, 5061, 60, 44100, cb_new_session, cb_recv, cb_send, cb_end_session, cb_dtmf, mpd);
+	sip s("10.208.11.13", "3737", "1234", { }, 0, 60, 44100, cb_new_session, cb_recv, cb_send, cb_end_session, cb_dtmf, mpd);
 
 	pause();
 
