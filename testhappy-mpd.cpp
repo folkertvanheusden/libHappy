@@ -62,6 +62,10 @@ bool cb_dtmf(const uint8_t dtmf_code, const bool is_end, const uint8_t volume, s
 
 	MpdObj         *mpd = reinterpret_cast<MpdObj *>(session->global_private_data);
 
+	int rc = mpd_connect(mpd);
+	if (rc != MPD_OK)
+		fprintf(stderr, "Cannot connect to MPD server: %d\n", rc);
+
 	if (is_end && dtmf_code != p->prev_key) {
 		int rc = -1;
 
@@ -93,6 +97,8 @@ bool cb_dtmf(const uint8_t dtmf_code, const bool is_end, const uint8_t volume, s
 		p->prev_key = dtmf_code;
 	}
 
+	mpd_disconnect(mpd);
+
 	if (!is_end)
 		p->prev_key = 255;
 
@@ -113,13 +119,6 @@ int main(int argc, char *argv[])
 
 	if (mpd == nullptr) {
 		fprintf(stderr, "Cannot setup MPD session\n");
-
-		return 1;
-	}
-
-	int rc = mpd_connect(mpd);
-	if (rc != MPD_OK) {
-		fprintf(stderr, "Cannot connect to MPD server: %d\n", rc);
 
 		return 1;
 	}
