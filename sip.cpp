@@ -197,9 +197,9 @@ void sip::sip_input(const sockaddr_in *const a, const int fd, uint8_t *const pay
 
 	std::string              pl_str       = std::string((const char *)payload, payload_size);
 
-	std::vector<std::string> header_body  = split(pl_str, "\r\n\r\n");
+	std::vector<std::string> pl_parts     = split(pl_str, "\r\n\r\n");
 
-	std::vector<std::string> header_lines = split(header_body.at(0), "\r\n");
+	std::vector<std::string> header_lines = split(pl_parts.at(0), "\r\n");
 
 	std::vector<std::string> parts        = split(header_lines.at(0), " ");
 
@@ -208,8 +208,8 @@ void sip::sip_input(const sockaddr_in *const a, const int fd, uint8_t *const pay
 	if (parts.size() == 3 && parts.at(0) == "OPTIONS" && parts.at(2) == "SIP/2.0") {
 		reply_to_OPTIONS(a, fd, &header_lines);
 	}
-	else if (parts.size() == 3 && parts.at(0) == "INVITE" && parts.at(2) == "SIP/2.0" && header_body.size() == 2) {
-		std::vector<std::string> body_lines = split(header_body.at(1), "\r\n");
+	else if (parts.size() == 3 && parts.at(0) == "INVITE" && parts.at(2) == "SIP/2.0" && pl_parts.size() == 2) {
+		std::vector<std::string> body_lines = split(pl_parts.at(1), "\r\n");
 
 		reply_to_INVITE(a, fd, &header_lines, &body_lines);
 	}
@@ -256,7 +256,7 @@ void sip::sip_input(const sockaddr_in *const a, const int fd, uint8_t *const pay
 				if (entry.first == str_call_id.value()) {
 					entry.second.first  = atoi(parts.at(1).c_str());
 
-					entry.second.second = header_lines;
+					entry.second.second = pl_parts;
 
 					sessions_cv.notify_all();
 
@@ -374,9 +374,13 @@ void sip::reply_to_OPTIONS(const sockaddr_in *const a, const int fd, const std::
 		DOLOG(info, "sip::reply_to_OPTIONS: transmit failed");
 }
 
-codec_t select_schema(const std::vector<std::string> *const body, const int max_rate)
+// sockaddr_in points to the RTP target
+std::optional<std::pair<codec_t, struct sockaddr_in> > dissect_sdp(const std::vector<std::string> *const body, const int max_rate)
 {
 	codec_t                  best { 255, "", "", -1, -1 };
+
+	int                      rtp_target_port { -1 };
+	std::string              rtp_target_host;
 
 	int                      frame_duration = 20;
 
@@ -391,13 +395,23 @@ codec_t select_schema(const std::vector<std::string> *const body, const int max_
 		if (line.substr(0, 11) == "a=maxptime:") {
 			frame_duration = std::min(40, atoi(line.substr(11).c_str()));
 
-			DOLOG(debug, "select_schema: frame duration set to %dms\n", frame_duration);
+			DOLOG(debug, "dissect_sdp: frame duration set to %dms\n", frame_duration);
+
+			continue;
+		}
+
+		if (line.substr(0, 2) == "o=") {
+			auto parts = split(line, " ");
+
+			rtp_target_host = parts[5];
 
 			continue;
 		}
 
 		if (line.substr(0, 7) == "m=audio") {
 			order = split(line, " ");
+
+			rtp_target_port = atoi(order.at(1).c_str());
 
 			// "m=audio 19206 RTP/AVP" are not of interest
 			order.erase(order.begin(), order.begin() + 3);
@@ -453,12 +467,9 @@ codec_t select_schema(const std::vector<std::string> *const body, const int max_
 	}
 
 	if (best.id == 255) {
-		DOLOG(info, "SIP: no suitable codec found? picking sane default\n");
+		DOLOG(info, "SIP: no suitable codec found\n");
 
-		best.id       = 8;
-		best.name     = "pcma";  // safe choice
-		best.org_name = "PCMA";  // safe choice
-		best.rate     = 8000;
+		return { };
 	}
 
 	// usually 20ms
@@ -467,7 +478,23 @@ codec_t select_schema(const std::vector<std::string> *const body, const int max_
 
 	DOLOG(info, "SIP: CODEC chosen: %s/%d (id: %u), frame size: %d\n", best.name.c_str(), best.rate, best.id, best.frame_size);
 
-	return best;
+	if (rtp_target_port == -1 || rtp_target_host.empty()) {
+		DOLOG(info, "SIP: RTP target not found in SDP payload\n");
+
+		return { };
+	}
+
+	auto          resolved_addr = resolve_name(rtp_target_host, rtp_target_port);
+
+	if (resolved_addr.has_value() == false) {
+		DOLOG(info, "SIP: cannot resolve RTP target\n");
+
+		return { };
+	}
+
+	struct sockaddr_in rtp_target = *reinterpret_cast<struct sockaddr_in *>(&resolved_addr.value());
+
+	return { { best, rtp_target } };
 }
 
 sip_session_t * sip::allocate_sip_session()
@@ -508,14 +535,14 @@ void sip::reply_to_INVITE(const sockaddr_in *const a, const int fd, const std::v
 	auto m = find_header(body, "m", "=");
 
 	if (m.has_value()) {
-		std::vector<std::string> m_parts = split(m.value(), " ");
+		auto schema_addr = dissect_sdp(body, samplerate);
 
-		codec_t schema = select_schema(body, samplerate);
+		if (schema_addr.has_value() == false)
+			return;
+
+		codec_t & schema = schema_addr.value().first;
 
 		if (schema.id != 255) {
-			// find port to transmit rtp data to and start send-thread
-			int  tgt_rtp_port  = m_parts.size() >= 2 ? atoi(m_parts.at(1).c_str()) : 8000;
-
 			auto call_id       = find_header(headers, "Call-ID");
 			if (call_id.has_value() == false)
 				return;
@@ -569,7 +596,7 @@ void sip::reply_to_INVITE(const sockaddr_in *const a, const int fd, const std::v
 					delete ss;
 				}
 				else {
-					ss->th = new std::thread(&sip::session, this, *a, tgt_rtp_port, ss);
+					ss->th = new std::thread(&sip::session, this, schema_addr.value().second, ss);
 
 					std::unique_lock<std::mutex> lck(sessions_lock);
 
@@ -887,14 +914,13 @@ void generate_beep(const double f, const double duration, const int samplerate, 
 		(*beep)[i] = 32767 * sin(mul * (i + i / double(samplerate)));
 }
 
-void sip::session(const struct sockaddr_in tgt_addr, const int tgt_rtp_port, sip_session_t *const ss)
+void sip::session(const struct sockaddr_in tgt_addr, sip_session_t *const ss)
 {
 	set_thread_name("SIP-RTP");
 
 	struct sockaddr_in work_addr = tgt_addr;
-	work_addr.sin_port = htons(tgt_rtp_port);
 
-	DOLOG(info, "sip::session: session handler thread started. transmit to %s:%d at rate %d\n", sockaddr_to_str(work_addr).c_str(), tgt_rtp_port, ss->schema.rate);
+	DOLOG(info, "sip::session: session handler thread started. transmit to %s:%d at rate %d\n", sockaddr_to_str(work_addr).c_str(), ntohs(work_addr.sin_port), ss->schema.rate);
 
 	std::thread audio_recv_thread([this, ss]() { wait_for_audio(ss); });
 
@@ -1208,11 +1234,11 @@ std::pair<std::optional<std::string>, int> sip::initiate_call(const std::string 
 	}
 
 	// open a port for RTP
-	int         fd       = create_datagram_socket(0);
+	int         rtp_fd   = create_datagram_socket(0);
 
 	// would need to invoke 'connect' to find a local IP
 	// now assuming that 'myip' is useable
-	auto        local_a  = get_local_addr(fd);
+	auto        local_a  = get_local_addr(rtp_fd);
 
 	// add SDP request
 	std::vector<std::string> sdp_records = generate_sdp_payload(myip, "IP4", local_a.second);
@@ -1260,6 +1286,7 @@ resend_INVITE_request:
 
 	int      wait_result = -1;
 	std::vector<std::string> reply_headers;
+	std::vector<std::string> reply_body;
 
 	uint64_t wait_start  = get_ms();
 
@@ -1268,13 +1295,24 @@ resend_INVITE_request:
 	for(;;) {
 		auto pending_it = sessions_pending.find(call_id);
 
-		if (pending_it == sessions_pending.end())
+		if (pending_it == sessions_pending.end()) {
+			// TODO delete ss; and also from sessions-map
+
 			return { { }, 500 };  // internal error: where did the record go?!
+		}
 
 		if (pending_it->second.first >= 200) {  // -1 is "not set" and 100...199 are "wait for peer"
 			wait_result   = pending_it->second.first;
 
-			reply_headers = pending_it->second.second;
+			if (pending_it->second.second.size() != 2) {
+				// TODO delete ss; and also from sessions-map
+
+				return { { }, 500 };  // internal error: where did the record go?!
+			}
+
+			reply_headers = split(pending_it->second.second[0], "\r\n");
+
+			reply_body    = split(pending_it->second.second[1], "\r\n");
 
 			if (pending_it->second.first == 401)  // requires a re-send so don't delete "pending" record
 				pending_it->second.first = -1;
@@ -1328,7 +1366,9 @@ resend_INVITE_request:
 
 		auto to_addr= str_to.value().substr(lt + 1, gt - lt - 1);
 
+	printf("digest_to: %s\n", digest_to.c_str());
 		auth_hdr    = generate_authorize_header(&reply_headers, digest_to, "INVITE");
+	printf("auth_hdr: %s\n", auth_hdr.c_str());
 
 		DOLOG(debug, "New auth header: %s\n", auth_hdr.c_str());
 
@@ -1355,20 +1395,26 @@ resend_INVITE_request:
 		return { { }, wait_result };
 	}
 
-	// TODO get headers etc at the place where sessions_pending is updated for the result code
-	// TODO start receive thread
-#if 0
-			ss->headers        = headers_out;
-			memcpy(&ss->sip_addr_peer, a, sizeof ss->sip_addr_peer);
-			ss->schema         = schema;
-			ss->fd             = create_datagram_socket(0);
-			ss->audio_port     = get_local_addr(ss->fd).second;
-			ss->peer           = from_value;
+	auto schema_addr = dissect_sdp(&reply_body, samplerate);
 
-			src_set_ratio(ss->audio_in_resample, double(samplerate) / schema.rate);  // TODO error checking
+	if (schema_addr.has_value() == false)
+		return { { }, 500 };
 
-			src_set_ratio(ss->audio_out_resample, schema.rate / double(samplerate));  // TODO error checking
-#endif
+	codec_t & schema = schema_addr.value().first;
+
+	ss->headers = reply_headers;
+	memcpy(&ss->sip_addr_peer, addr, sizeof ss->sip_addr_peer);
+	ss->fd             = rtp_fd;
+	ss->peer           = target;
+	ss->schema         = schema;
+	ss->audio_port     = local_a.second;
+
+	src_set_ratio(ss->audio_in_resample, double(samplerate) / schema.rate);  // TODO error checking
+
+	src_set_ratio(ss->audio_out_resample, schema.rate / double(samplerate));  // TODO error checking
+
+	// start receive thread
+	ss->th = new std::thread(&sip::session, this, schema_addr.value().second, ss);
 
 	return { call_id, wait_result };
 }

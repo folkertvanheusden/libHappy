@@ -80,5 +80,7 @@ int main(int argc, char *argv[])
 
 	printf("%d\n", rc.second);
 
+	getchar();
+
 	return 0;
 }

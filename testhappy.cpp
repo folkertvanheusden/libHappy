@@ -63,8 +63,8 @@ int main(int argc, char *argv[])
 
 	// remote ip (IP address of upstream asterisk server), my extension-number, my password, my ip, my sip port, samplerate-used-by-callbacks, [callbacks...], pointer to global private data (or nullptr)
 	// note: 'my ip' is only required when the library cannot figure out what IP address to use to contact the SIP server. This can happen when there's a NAT router in between for example.
-	//sip s("172.29.0.1", "9999", "1234", "172.29.0.107", 5060, 60, 44100, cb_new_session, cb_recv, cb_send, cb_end_session, cb_dtmf, nullptr);
-	sip s("192.168.64.204", "9997", "1234", { }, 0, 60, 44100, cb_new_session, cb_recv, cb_send, cb_end_session, cb_dtmf, nullptr);
+	sip s("172.29.0.1", "9999", "1234", "172.29.0.107", 5060, 60, 44100, cb_new_session, cb_recv, cb_send, cb_end_session, cb_dtmf, nullptr);
+	//sip s("192.168.64.204", "9997", "1234", { }, 0, 60, 44100, cb_new_session, cb_recv, cb_send, cb_end_session, cb_dtmf, nullptr);
 
 	// do whatever you like here, the sleep-loop is not required as long
 	// as the sip-object is left instantiated

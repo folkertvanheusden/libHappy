@@ -176,7 +176,7 @@ private:
 
 	std::string generate_authorize_header(const std::vector<std::string> *const headers, const std::string & uri, const std::string & method);
 
-	void session(const struct sockaddr_in tgt_addr, const int tgt_rtp_port, sip_session_t *const ss);
+	void session(const struct sockaddr_in tgt_addr, sip_session_t *const ss);
 
 	void wait_for_registered();
 
