@@ -34,9 +34,14 @@ add_executable(
 )
 
 add_executable(
-  testhappy-mpd
-  testhappy-mpd.cpp
+  testhappy-call
+  testhappy-call.cpp
 )
+
+#add_executable(
+#  testhappy-mpd
+#  testhappy-mpd.cpp
+#)
 
 set(CMAKE_THREAD_PREFER_PTHREAD TRUE)
 set(THREADS_PREFER_PTHREAD_FLAG TRUE)
@@ -50,7 +55,9 @@ target_link_libraries(testhappy happy)
 
 target_link_libraries(testhappy-alsa happy)
 
-target_link_libraries(testhappy-mpd happy)
+target_link_libraries(testhappy-call happy)
+
+#target_link_libraries(testhappy-mpd happy)
 
 include(FindPkgConfig)
 
@@ -64,10 +71,15 @@ target_link_libraries(testhappy-alsa ${ALSA_LIBRARIES})
 target_include_directories(testhappy-alsa PUBLIC ${ALSA_INCLUDE_DIRS})
 target_compile_options(testhappy-alsa PUBLIC ${ALSA_CFLAGS_OTHER})
 
-pkg_check_modules(MPD REQUIRED libmpd)
-target_link_libraries(testhappy-mpd ${MPD_LIBRARIES})
-target_include_directories(testhappy-mpd PUBLIC ${MPD_INCLUDE_DIRS})
-target_compile_options(testhappy-mpd PUBLIC ${MPD_CFLAGS_OTHER})
+pkg_check_modules(ALSA REQUIRED alsa)
+target_link_libraries(testhappy-call ${ALSA_LIBRARIES})
+target_include_directories(testhappy-call PUBLIC ${ALSA_INCLUDE_DIRS})
+target_compile_options(testhappy-call PUBLIC ${ALSA_CFLAGS_OTHER})
+
+#pkg_check_modules(MPD REQUIRED libmpd)
+#target_link_libraries(testhappy-mpd ${MPD_LIBRARIES})
+#target_include_directories(testhappy-mpd PUBLIC ${MPD_INCLUDE_DIRS})
+#target_compile_options(testhappy-mpd PUBLIC ${MPD_CFLAGS_OTHER})
 
 include(FindPkgConfig)
 

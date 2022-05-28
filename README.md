@@ -23,7 +23,7 @@ cmake install
 
 ... will install the library and a .pc-file (for pkg-config).
 
-Note that if the libg722 library is empty, then invoke:
+Note that if the libg722 directory is empty, then invoke first (before running make):
 * cd libg722
 * git submodule init
 * git submodule update
