@@ -131,9 +131,15 @@ sip::sip(const std::string & upstream_sip_server, const std::string & upstream_s
 	sip_fd = create_datagram_socket(myport);
 
 	if (myport == 0) {
+		if (sip_fd == -1)
+			error_exit(true, "Cannot auto allocate UDP port (for SIP)");
+
 		this->myport = get_local_addr(sip_fd).second;
 
 		DOLOG(debug, "Local port number: %d\n", this->myport);
+	}
+	else if (sip_fd == 1) {
+		error_exit(true, "Selected port for SIP (UDP %d) is not available", myport);
 	}
 
 	myaddr = this->myip + myformat(":%d", this->myport);
@@ -550,12 +556,25 @@ void sip::reply_to_INVITE(const sockaddr_in *const a, const int fd, const std::v
 
 		if (schema.id != 255) {
 			auto call_id       = find_header(headers, "Call-ID");
-			if (call_id.has_value() == false)
+			if (call_id.has_value() == false) {
+				DOLOG(info, "Call-ID header missing\n");
+
 				return;
+			}
 
 			auto from          = find_header(headers, "From");
-			if (from.has_value() == false)
+			if (from.has_value() == false) {
+				DOLOG(info, "From header missing\n");
+
 				return;
+			}
+
+			int  rtp_fd        = create_datagram_socket(0);
+			if (rtp_fd == -1) {
+				DOLOG(info, "Cannot allocate RTP (UDP) port\n");
+
+				return;
+			}
 
 			std::string from_value = from.value();
 
@@ -568,7 +587,7 @@ void sip::reply_to_INVITE(const sockaddr_in *const a, const int fd, const std::v
 			ss->headers        = *headers;
 			memcpy(&ss->sip_addr_peer, a, sizeof ss->sip_addr_peer);
 			ss->schema         = schema;
-			ss->fd             = create_datagram_socket(0);
+			ss->fd             = rtp_fd;
 			ss->audio_port     = get_local_addr(ss->fd).second;
 			ss->call_id        = call_id.value();
 			ss->peer           = from_value;
