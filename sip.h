@@ -182,6 +182,8 @@ private:
 
 	void session_cleaner();
 
+	void forget_session(sip_session_t *const ss);
+
 	sip(const sip &) = delete;
 
 public:

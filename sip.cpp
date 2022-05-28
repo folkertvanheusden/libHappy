@@ -514,9 +514,15 @@ sip_session_t * sip::allocate_sip_session()
 
 	// init audio resampler
 	int dummy = 0;
-	ss->audio_in_resample  = src_new(SRC_SINC_BEST_QUALITY, 1, &dummy);  // TODO error checking
+	ss->audio_in_resample  = src_new(SRC_SINC_BEST_QUALITY, 1, &dummy);
 
-	ss->audio_out_resample = src_new(SRC_SINC_BEST_QUALITY, 1, &dummy);  // TODO error checking
+	ss->audio_out_resample = src_new(SRC_SINC_BEST_QUALITY, 1, &dummy);
+
+	if (!ss->audio_in_resample || !ss->audio_out_resample || !ss->g722_encoder || !ss->g722_decoder) {
+		delete ss;
+
+		return nullptr;
+	}
 
 	return ss;
 }
@@ -567,7 +573,7 @@ void sip::reply_to_INVITE(const sockaddr_in *const a, const int fd, const std::v
 			ss->call_id        = call_id.value();
 			ss->peer           = from_value;
 
-			src_set_ratio(ss->audio_in_resample, double(samplerate) / schema.rate);  // TODO error checking
+			src_set_ratio(ss->audio_in_resample, double(samplerate) / schema.rate);  // TODO error checking, fail and send CANCEL
 
 			src_set_ratio(ss->audio_out_resample, schema.rate / double(samplerate));  // TODO error checking
 
@@ -1198,6 +1204,17 @@ void sip::wait_for_registered()
 		registered_cv.wait(lck);
 }
 
+void sip::forget_session(sip_session_t *const ss)
+{
+	std::unique_lock<std::mutex> lck(sessions_lock);
+
+	sessions.erase(ss->call_id);
+
+	sessions_pending.erase(ss->call_id);
+
+	delete ss;
+}
+
 std::pair<std::optional<std::string>, int> sip::initiate_call(const std::string & target, const std::string & local_address, const int timeout)
 {
 	wait_for_registered();
@@ -1279,7 +1296,7 @@ resend_INVITE_request:
 	if (transmit_packet(addr, sip_fd, reinterpret_cast<const uint8_t *>(request.c_str()), request.size()) == false) {
 		DOLOG(info, "sip::reply_to_OPTIONS: transmit failed");
 
-		// TODO delete ss; and also from sessions-map
+		forget_session(ss);
 
 		return { { }, 500 };
 	}
@@ -1296,7 +1313,7 @@ resend_INVITE_request:
 		auto pending_it = sessions_pending.find(call_id);
 
 		if (pending_it == sessions_pending.end()) {
-			// TODO delete ss; and also from sessions-map
+			forget_session(ss);
 
 			return { { }, 500 };  // internal error: where did the record go?!
 		}
@@ -1305,7 +1322,7 @@ resend_INVITE_request:
 			wait_result   = pending_it->second.first;
 
 			if (pending_it->second.second.size() != 2) {
-				// TODO delete ss; and also from sessions-map
+				forget_session(ss);
 
 				return { { }, 500 };  // internal error: where did the record go?!
 			}
@@ -1351,28 +1368,37 @@ resend_INVITE_request:
 		std::string request  = merge(headers_out, "\r\n");
 
 		if (transmit_packet(addr, sip_fd, reinterpret_cast<const uint8_t *>(request.c_str()), request.size()) == false) {
-			// TODO delete ss; and also from sessions-map
+			forget_session(ss);
 
 			return { { }, 500 };
 		}
 	}
 
 	if (wait_result == 401) {
-		// TODO error checks
-		auto str_to = find_header(&reply_headers, "To");
+		bool ok = true;
 
-		auto lt     = str_to.value().find('<');
-		auto gt     = str_to.value().find('>', lt);
+		do {
+			auto str_to = find_header(&reply_headers, "To");
 
-		auto to_addr= str_to.value().substr(lt + 1, gt - lt - 1);
+			if (str_to.has_value() == false) {
+				ok = false;
 
-	printf("digest_to: %s\n", digest_to.c_str());
-		auth_hdr    = generate_authorize_header(&reply_headers, digest_to, "INVITE");
-	printf("auth_hdr: %s\n", auth_hdr.c_str());
+				break;
+			}
 
-		DOLOG(debug, "New auth header: %s\n", auth_hdr.c_str());
+			auth_hdr    = generate_authorize_header(&reply_headers, digest_to, "INVITE");
 
-		to          = str_to.value();
+			DOLOG(debug, "New auth header: %s\n", auth_hdr.c_str());
+
+			to          = str_to.value();
+		}
+		while(0);
+
+		if (!ok) {
+			forget_session(ss);
+
+			return { { }, 500 };
+		}
 
 		goto resend_INVITE_request;
 	}
@@ -1383,22 +1409,26 @@ resend_INVITE_request:
 		if (sessions_it != sessions.end())
 			delete sessions_it->second;
 
-		send_BYE(addr, sip_fd, headers_out);
+		forget_session(ss);
 
 		return { { }, 504 };  // server time-out
 	}
 		
 	if (wait_result >= 300) {  // session did not start
-		if (sessions_it != sessions.end())
-			delete sessions_it->second;
+		forget_session(ss);
 
 		return { { }, wait_result };
 	}
 
 	auto schema_addr = dissect_sdp(&reply_body, samplerate);
 
-	if (schema_addr.has_value() == false)
+	if (schema_addr.has_value() == false) {
+		forget_session(ss);
+
+		// TODO send CANCEL
+
 		return { { }, 500 };
+	}
 
 	codec_t & schema = schema_addr.value().first;
 
@@ -1409,9 +1439,14 @@ resend_INVITE_request:
 	ss->schema         = schema;
 	ss->audio_port     = local_a.second;
 
-	src_set_ratio(ss->audio_in_resample, double(samplerate) / schema.rate);  // TODO error checking
+	if (src_set_ratio(ss->audio_in_resample, double(samplerate) / schema.rate) != 0 || 
+	    src_set_ratio(ss->audio_out_resample, schema.rate / double(samplerate)) != 0) {
+		forget_session(ss);
 
-	src_set_ratio(ss->audio_out_resample, schema.rate / double(samplerate));  // TODO error checking
+		// TODO send CANCEL
+
+		return { { }, 500 };
+	}
 
 	// start receive thread
 	ss->th = new std::thread(&sip::session, this, schema_addr.value().second, ss);
