@@ -125,9 +125,11 @@ std::optional<struct sockaddr> resolve_name(const std::string & name, const int 
 		close(fd);
 
 		if (rc == 0) {
+			struct sockaddr temp = *rp->ai_addr;
+
 			freeaddrinfo(result);
 
-			return *rp->ai_addr;
+			return temp;
 		}
 	}
 

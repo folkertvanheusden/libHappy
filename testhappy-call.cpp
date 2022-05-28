@@ -1,4 +1,5 @@
 // (C) 2022 by folkert van heusden <mail@vanheusden.com>, released under Apache License v2.0
+#include <signal.h>
 #include <unistd.h>
 
 #include "sip.h"
@@ -55,8 +56,14 @@ bool cb_dtmf(const uint8_t dtmf_code, const bool is_end, const uint8_t volume, s
 	return true;
 }
 
+void sigh(int sig)
+{
+}
+
 int main(int argc, char *argv[])
 {
+	signal(SIGINT, sigh);
+
 	// filename, loglevel for logging to file, level for logging to screen
 	// levels: debug, info, warning, ll_error
 	setlog("testhappy.log", debug, debug);
@@ -80,7 +87,7 @@ int main(int argc, char *argv[])
 
 	printf("%d\n", rc.second);
 
-	getchar();
+	pause();
 
 	return 0;
 }
