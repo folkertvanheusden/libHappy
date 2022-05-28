@@ -131,7 +131,7 @@ sip::sip(const std::string & upstream_sip_server, const std::string & upstream_s
 	sip_fd = create_datagram_socket(myport);
 
 	if (myport == 0) {
-		this->myport = get_local_port(sip_fd);
+		this->myport = get_local_addr(sip_fd).second;
 
 		DOLOG(debug, "Local port number: %d\n", this->myport);
 	}
@@ -140,11 +140,11 @@ sip::sip(const std::string & upstream_sip_server, const std::string & upstream_s
 
 	tag    = random_hex(16);
 
-	th1 = new std::thread(&sip::session_cleaner, this);  // session cleaner
+	th1    = new std::thread(&sip::session_cleaner, this);  // session cleaner
 
-	th2 = new std::thread(&sip::register_thread, this);  // keep-alive to upstream SIP
+	th2    = new std::thread(&sip::register_thread, this);  // keep-alive to upstream SIP
 
-	th3 = new std::thread(&sip::sip_listener, this);  // listens for SIP packets
+	th3    = new std::thread(&sip::sip_listener, this);  // listens for SIP packets
 }
 
 sip::~sip()
@@ -197,11 +197,9 @@ void sip::sip_input(const sockaddr_in *const a, const int fd, uint8_t *const pay
 
 	std::string              pl_str       = std::string((const char *)payload, payload_size);
 
-	// DOLOG(debug, "sip::sip_input: %s\n", pl_str.c_str());
+	std::vector<std::string> pl_parts     = split(pl_str, "\r\n\r\n");
 
-	std::vector<std::string> header_body  = split(pl_str, "\r\n\r\n");
-
-	std::vector<std::string> header_lines = split(header_body.at(0), "\r\n");
+	std::vector<std::string> header_lines = split(pl_parts.at(0), "\r\n");
 
 	std::vector<std::string> parts        = split(header_lines.at(0), " ");
 
@@ -210,25 +208,62 @@ void sip::sip_input(const sockaddr_in *const a, const int fd, uint8_t *const pay
 	if (parts.size() == 3 && parts.at(0) == "OPTIONS" && parts.at(2) == "SIP/2.0") {
 		reply_to_OPTIONS(a, fd, &header_lines);
 	}
-	else if (parts.size() == 3 && parts.at(0) == "INVITE" && parts.at(2) == "SIP/2.0" && header_body.size() == 2) {
-		std::vector<std::string> body_lines = split(header_body.at(1), "\r\n");
+	else if (parts.size() == 3 && parts.at(0) == "INVITE" && parts.at(2) == "SIP/2.0" && pl_parts.size() == 2) {
+		std::vector<std::string> body_lines = split(pl_parts.at(1), "\r\n");
 
 		reply_to_INVITE(a, fd, &header_lines, &body_lines);
 	}
 	else if (parts.size() == 3 && parts.at(0) == "BYE" && parts.at(2) == "SIP/2.0") {
 		reply_to_BYE(a, fd, &header_lines);
 	}
-	else if (parts.size() >= 2 && parts.at(0) == "SIP/2.0" && parts.at(1) == "401") {
-		if (now - ddos_protection > 1000000) {
-			reply_to_UNAUTHORIZED(&header_lines);
-			ddos_protection = now;
+	else if (parts.size() >= 2 && parts.at(0) == "SIP/2.0") {
+		auto str_call_id = find_header(&header_lines, "Call-ID");
+
+		if (str_call_id.has_value() == false) {
+			DOLOG(info, "Call-ID missing in headers\n");
+
+			return;
+		}
+
+		if (str_call_id.value() == register_cid) {
+			std::unique_lock<std::mutex> lck(registered_lock);
+
+			if (parts.at(1) == "401") {
+				if (now - ddos_protection > 1000000) {
+					lck.unlock();
+
+					reply_to_UNAUTHORIZED(&header_lines);
+
+					ddos_protection = now;
+				}
+				else {
+					DOLOG(info, "SIP: drop 401 packet\n");
+				}
+			}
+			else if (parts.at(1) == "200") {
+				is_registered = true;
+
+				registered_cv.notify_all();
+			}
 		}
 		else {
-			DOLOG(info, "SIP: drop 401 packet\n");
+			if (parts.at(1) == "401")
+				DOLOG(debug, "Unauthorized header received, regenerate auth-header for %s\n", str_call_id.value().c_str());
+
+			std::unique_lock<std::mutex> lck(sessions_lock);
+
+			for(auto & entry : sessions_pending) {
+				if (entry.first == str_call_id.value()) {
+					entry.second.first  = atoi(parts.at(1).c_str());
+
+					entry.second.second = pl_parts;
+
+					sessions_cv.notify_all();
+
+					break;
+				}
+			}
 		}
-	}
-	else if (parts.size() >= 2 && parts.at(0) == "SIP/2.0" && parts.at(1) == "200") {
-		// suppress error for this message; it is not an error but might confuse
 	}
 	else {
 		DOLOG(info, "SIP: request \"%s\" not understood\n", header_lines.at(0).c_str());
@@ -301,26 +336,33 @@ bool sip::transmit_packet(const sockaddr_in *const a, const int fd, const uint8_
 	return sendto(fd, data, data_size, 0, reinterpret_cast<const struct sockaddr *>(a), sizeof *a) == ssize_t(data_size);
 }
 
+std::vector<std::string> sip::generate_sdp_payload(const std::string & ip, const std::string & proto, const int rtp_port)
+{
+	std::vector<std::string> payload;
+
+	payload.push_back("v=0");
+	payload.push_back("o=jdoe 0 0 IN " + proto + " " + ip);
+	payload.push_back("c=IN " + proto + " " + ip);
+	payload.push_back("s=libHappy");
+	payload.push_back("t=0 0");
+	payload.push_back(myformat("m=audio %u RTP/AVP 0 8 9 11", rtp_port));
+	payload.push_back("a=sendrecv");
+	payload.push_back(myformat("a=rtpmap:0 PCMU/%u", samplerate));
+	payload.push_back(myformat("a=rtpmap:8 PCMA/%u", samplerate));
+	payload.push_back(myformat("a=rtpmap:9 G722/8000"));
+	payload.push_back(myformat("a=rtpmap:11 L16/%u", samplerate));
+	payload.push_back(myformat("a=rtpmap:101 telephone-event/%u", samplerate));
+
+	return payload;
+}
+
 void sip::reply_to_OPTIONS(const sockaddr_in *const a, const int fd, const std::vector<std::string> *const headers)
 {
-	std::string proto = a->sin_family == AF_INET ? "IP4" : "IP6";
+	std::string              proto       = a->sin_family == AF_INET ? "IP4" : "IP6";
 
-	std::vector<std::string> content;
-	content.push_back("v=0");
-	content.push_back("o=jdoe 0 0 IN " + proto + " " + sockaddr_to_str(*a).c_str()); // my ip
-	content.push_back("c=IN " + proto + " " + sockaddr_to_str(*a).c_str()); // my ip
-	content.push_back("s=libHappy");
-	content.push_back("t=0 0");
-	// 1234 is (should) not be relevant; real port number is returned as a reply to INVITE
-	content.push_back("m=audio 1234 RTP/AVP 0 8 9 11");
-	content.push_back("a=sendrecv");
-	content.push_back(myformat("a=rtpmap:0 PCMU/%u", samplerate));
-	content.push_back(myformat("a=rtpmap:8 PCMA/%u", samplerate));
-	content.push_back(myformat("a=rtpmap:9 G722/8000"));
-	content.push_back(myformat("a=rtpmap:11 L16/%u", samplerate));
-	content.push_back(myformat("a=rtpmap:101 telephone-event/%u", samplerate));
+	std::vector<std::string> content     = generate_sdp_payload(sockaddr_to_str(*a), proto, 0);  // port is not allocated yet
 
-	std::string content_out = merge(content, "\r\n");
+	std::string              content_out = merge(content, "\r\n");
 
 	std::vector<std::string> hout;
 	create_response_headers("SIP/2.0 200 OK", &hout, false, headers, content_out.size(), *a, myaddr);
@@ -332,9 +374,13 @@ void sip::reply_to_OPTIONS(const sockaddr_in *const a, const int fd, const std::
 		DOLOG(info, "sip::reply_to_OPTIONS: transmit failed");
 }
 
-codec_t select_schema(const std::vector<std::string> *const body, const int max_rate)
+// sockaddr_in points to the RTP target
+std::optional<std::pair<codec_t, struct sockaddr_in> > dissect_sdp(const std::vector<std::string> *const body, const int max_rate)
 {
 	codec_t                  best { 255, "", "", -1, -1 };
+
+	int                      rtp_target_port { -1 };
+	std::string              rtp_target_host;
 
 	int                      frame_duration = 20;
 
@@ -349,13 +395,23 @@ codec_t select_schema(const std::vector<std::string> *const body, const int max_
 		if (line.substr(0, 11) == "a=maxptime:") {
 			frame_duration = std::min(40, atoi(line.substr(11).c_str()));
 
-			DOLOG(debug, "select_schema: frame duration set to %dms\n", frame_duration);
+			DOLOG(debug, "dissect_sdp: frame duration set to %dms\n", frame_duration);
+
+			continue;
+		}
+
+		if (line.substr(0, 2) == "o=") {
+			auto parts = split(line, " ");
+
+			rtp_target_host = parts[5];
 
 			continue;
 		}
 
 		if (line.substr(0, 7) == "m=audio") {
 			order = split(line, " ");
+
+			rtp_target_port = atoi(order.at(1).c_str());
 
 			// "m=audio 19206 RTP/AVP" are not of interest
 			order.erase(order.begin(), order.begin() + 3);
@@ -411,12 +467,9 @@ codec_t select_schema(const std::vector<std::string> *const body, const int max_
 	}
 
 	if (best.id == 255) {
-		DOLOG(info, "SIP: no suitable codec found? picking sane default\n");
+		DOLOG(info, "SIP: no suitable codec found\n");
 
-		best.id       = 8;
-		best.name     = "pcma";  // safe choice
-		best.org_name = "PCMA";  // safe choice
-		best.rate     = 8000;
+		return { };
 	}
 
 	// usually 20ms
@@ -425,7 +478,47 @@ codec_t select_schema(const std::vector<std::string> *const body, const int max_
 
 	DOLOG(info, "SIP: CODEC chosen: %s/%d (id: %u), frame size: %d\n", best.name.c_str(), best.rate, best.id, best.frame_size);
 
-	return best;
+	if (rtp_target_port == -1 || rtp_target_host.empty()) {
+		DOLOG(info, "SIP: RTP target not found in SDP payload\n");
+
+		return { };
+	}
+
+	auto          resolved_addr = resolve_name(rtp_target_host, rtp_target_port);
+
+	if (resolved_addr.has_value() == false) {
+		DOLOG(info, "SIP: cannot resolve RTP target\n");
+
+		return { };
+	}
+
+	struct sockaddr_in rtp_target = *reinterpret_cast<struct sockaddr_in *>(&resolved_addr.value());
+
+	return { { best, rtp_target } };
+}
+
+sip_session_t * sip::allocate_sip_session()
+{
+	sip_session_t *ss  = new sip_session_t();
+
+	ss->th             = nullptr;
+
+	ss->start_ts       = get_us();
+
+	ss->samplerate     = samplerate;
+
+	ss->g722_encoder   = g722_encoder_new(64000, G722_SAMPLE_RATE_8000);
+	ss->g722_decoder   = g722_decoder_new(64000, G722_SAMPLE_RATE_8000);
+
+	ss->global_private_data = global_private_data;
+
+	// init audio resampler
+	int dummy = 0;
+	ss->audio_in_resample  = src_new(SRC_SINC_BEST_QUALITY, 1, &dummy);  // TODO error checking
+
+	ss->audio_out_resample = src_new(SRC_SINC_BEST_QUALITY, 1, &dummy);  // TODO error checking
+
+	return ss;
 }
 
 void sip::reply_to_INVITE(const sockaddr_in *const a, const int fd, const std::vector<std::string> *const headers, const std::vector<std::string> *const body)
@@ -442,14 +535,14 @@ void sip::reply_to_INVITE(const sockaddr_in *const a, const int fd, const std::v
 	auto m = find_header(body, "m", "=");
 
 	if (m.has_value()) {
-		std::vector<std::string> m_parts = split(m.value(), " ");
+		auto schema_addr = dissect_sdp(body, samplerate);
 
-		codec_t schema = select_schema(body, samplerate);
+		if (schema_addr.has_value() == false)
+			return;
+
+		codec_t & schema = schema_addr.value().first;
 
 		if (schema.id != 255) {
-			// find port to transmit rtp data to and start send-thread
-			int  tgt_rtp_port  = m_parts.size() >= 2 ? atoi(m_parts.at(1).c_str()) : 8000;
-
 			auto call_id       = find_header(headers, "Call-ID");
 			if (call_id.has_value() == false)
 				return;
@@ -464,25 +557,18 @@ void sip::reply_to_INVITE(const sockaddr_in *const a, const int fd, const std::v
 			if (semi_colon != std::string::npos)
 				from_value = from_value.substr(0, semi_colon);
 
-			sip_session_t *ss  = new sip_session_t();
-			ss->start_ts       = get_us();
+			sip_session_t *ss  = allocate_sip_session();
+
 			ss->headers        = *headers;
 			memcpy(&ss->sip_addr_peer, a, sizeof ss->sip_addr_peer);
 			ss->schema         = schema;
 			ss->fd             = create_datagram_socket(0);
-			ss->audio_port     = get_local_port(ss->fd);
-			ss->samplerate     = samplerate;
+			ss->audio_port     = get_local_addr(ss->fd).second;
 			ss->call_id        = call_id.value();
-			ss->g722_encoder   = g722_encoder_new(64000, G722_SAMPLE_RATE_8000);
-			ss->g722_decoder   = g722_decoder_new(64000, G722_SAMPLE_RATE_8000);
-			ss->global_private_data = global_private_data;
+			ss->peer           = from_value;
 
-			// init audio resampler
-			int dummy = 0;
-			ss->audio_in_resample  = src_new(SRC_SINC_BEST_QUALITY, 1, &dummy);  // TODO error checking
 			src_set_ratio(ss->audio_in_resample, double(samplerate) / schema.rate);  // TODO error checking
 
-			ss->audio_out_resample = src_new(SRC_SINC_BEST_QUALITY, 1, &dummy);  // TODO error checking
 			src_set_ratio(ss->audio_out_resample, schema.rate / double(samplerate));  // TODO error checking
 
 			content.push_back("a=sendrecv");
@@ -510,11 +596,13 @@ void sip::reply_to_INVITE(const sockaddr_in *const a, const int fd, const std::v
 					delete ss;
 				}
 				else {
-					ss->th = new std::thread(&sip::session, this, *a, tgt_rtp_port, ss);
+					ss->th = new std::thread(&sip::session, this, schema_addr.value().second, ss);
 
-					std::unique_lock<std::mutex> lck(slock);
+					std::unique_lock<std::mutex> lck(sessions_lock);
 
 					sessions.insert({ call_id.value(), ss });
+
+					sessions_cv.notify_all();
 				}
 			}
 			else {
@@ -558,7 +646,7 @@ void sip::reply_to_BYE(const sockaddr_in *const a, const int fd, const std::vect
 	}
 
 	{
-		std::unique_lock<std::mutex> lck(slock);
+		std::unique_lock<std::mutex> lck(sessions_lock);
 
 		auto it = sessions.find(call_id.value());
 
@@ -571,12 +659,23 @@ void sip::reply_to_BYE(const sockaddr_in *const a, const int fd, const std::vect
 	send_ACK(a, fd, headers);
 }
 
-void sip::reply_to_UNAUTHORIZED(const std::vector<std::string> *const headers)
+static std::string calculate_digest(const std::string & username, const std::string & realm, const std::string & secret, const std::string & method, const std::string & uri, const std::string & nonce)
+{
+	std::string a1     = md5(username + ":" + realm + ":" + secret);
+
+	std::string a2     = md5(method + ":" + uri);
+
+	std::string digest = md5(a1 + ":" + nonce + ":" + a2);
+
+	return digest;
+}
+
+std::string sip::generate_authorize_header(const std::vector<std::string> *const headers, const std::string & uri, const std::string & method)
 {
 	auto str_wa = find_header(headers, "WWW-Authenticate");
 	if (!str_wa.has_value()) {
 		DOLOG(info, "SIP: \"WWW-Authenticate\" missing");
-		return;
+		return "";
 	}
 
 	auto        call_id = find_header(headers, "Call-ID");
@@ -595,21 +694,43 @@ void sip::reply_to_UNAUTHORIZED(const std::vector<std::string> *const headers)
 	if (str_realm.has_value())
 		realm = replace(str_realm.value(), "\"", "");
 
+	std::string opaque;
+	auto str_opaque = find_header(&parameters, "opaque", "=");
+	if (str_opaque.has_value())
+		opaque = replace(str_opaque.value(), "\"", "");
+
 	std::string nonce;
 	auto str_nonce = find_header(&parameters, "nonce", "=");
 	if (str_nonce.has_value())
 		nonce = replace(str_nonce.value(), "\"", "");
 
-	std::string a1        = md5(username + ":" + realm + ":" + password);
-	std::string a2        = md5("REGISTER:sip:" + myaddr);
+	std::string digest    = calculate_digest(username, realm, password, method, uri, nonce);
 
-	std::string digest    = md5(a1 + ":" + nonce + ":" + a2);
+	std::string authorize = "Authorization: Digest username=\"" + username + "\",realm=\"" + realm + "\",nonce=\"" + nonce + "\",uri=\"" + uri + "\",algorithm=MD5,response=\"" + digest + "\"";
 
-	std::string authorize = "Authorization: Digest username=\"" + username + "\",realm=\"" + realm + "\",nonce=\"" + nonce + "\",uri=\"sip:" + myaddr + "\",algorithm=MD5,response=\"" + digest + "\"";
+	if (opaque.empty() == false)
+		authorize += ",opaque=\"" + opaque + "\"";
 
 	std::string call_id_str = call_id.has_value() ? call_id.value() : "";
 
-	send_REGISTER(call_id_str, authorize);
+	{
+		std::unique_lock<std::mutex> lck(registered_lock);
+
+		register_authline = authorize;
+	}
+
+	return authorize;
+}
+
+void sip::reply_to_UNAUTHORIZED(const std::vector<std::string> *const headers)
+{
+	std::string auth_header = generate_authorize_header(headers, "sip:" + myaddr, "REGISTER");
+
+	auto        call_id     = find_header(headers, "Call-ID");
+
+	std::string call_id_str = call_id.has_value() ? call_id.value() : "";
+
+	send_REGISTER(call_id_str, auth_header);
 }
 
 static std::pair<uint8_t *, int> create_rtp_packet(const uint32_t ssrc, const uint16_t seq_nr, const uint32_t t, const codec_t & schema, const short *const samples, const int n_samples, G722_ENC_CTX *const g722_enc)
@@ -793,14 +914,13 @@ void generate_beep(const double f, const double duration, const int samplerate, 
 		(*beep)[i] = 32767 * sin(mul * (i + i / double(samplerate)));
 }
 
-void sip::session(const struct sockaddr_in tgt_addr, const int tgt_rtp_port, sip_session_t *const ss)
+void sip::session(const struct sockaddr_in tgt_addr, sip_session_t *const ss)
 {
 	set_thread_name("SIP-RTP");
 
 	struct sockaddr_in work_addr = tgt_addr;
-	work_addr.sin_port = htons(tgt_rtp_port);
 
-	DOLOG(info, "sip::session: session handler thread started. transmit to %s:%d at rate %d\n", sockaddr_to_str(work_addr).c_str(), tgt_rtp_port, ss->schema.rate);
+	DOLOG(info, "sip::session: session handler thread started. transmit to %s:%d at rate %d\n", sockaddr_to_str(work_addr).c_str(), ntohs(work_addr.sin_port), ss->schema.rate);
 
 	std::thread audio_recv_thread([this, ss]() { wait_for_audio(ss); });
 
@@ -979,7 +1099,7 @@ void sip::session_cleaner()
 	while(!stop_flag) {
 		myusleep(500000);
 
-		std::unique_lock<std::mutex> lck(slock);
+		std::unique_lock<std::mutex> lck(sessions_lock);
 
 		for(auto it=sessions.begin(); it!=sessions.end();) {
 			if (it->second->finished) {
@@ -1015,18 +1135,25 @@ bool sip::send_REGISTER(const std::string & call_id, const std::string & authori
 
 	std::string out      = "REGISTER sip:" + tgt_addr + " SIP/2.0\r\n";
 
+	std::string use_cid  = call_id;
+
 	if (authorize.empty()) {
 		out += "CSeq: 1 REGISTER\r\n";
 
-		uint64_t r = 0;
-		get_random((uint8_t *)&r, sizeof r);
+		use_cid = random_hex(16) + "@" + myaddr;
 
-		out += "Call-ID: " + myformat("%08lx", r) + "@" + myaddr + "\r\n";
+		out += "Call-ID: " + use_cid + "\r\n";
 	}
        	else {
 		out += authorize + "\r\n";
 		out += "CSeq: 2 REGISTER\r\n";
 		out += "Call-ID: " + call_id + "\r\n";
+	}
+
+	{
+		std::unique_lock<std::mutex> lck(registered_lock);
+
+		register_cid = use_cid;
 	}
 
 	out += "Via: SIP/2.0/UDP " + myaddr + "\r\n";
@@ -1050,15 +1177,244 @@ bool sip::send_REGISTER(const std::string & call_id, const std::string & authori
 // register at upstream server
 void sip::register_thread()
 {
-	myusleep(2500000);
+	myusleep(501000);
 
 	while(!stop_flag) {
 		int cur_interval = interval;
 
 		if (!send_REGISTER("", ""))
-			cur_interval = 30;
+			cur_interval /= 2;
 
 		for(int i=0; i<cur_interval * 2 && !stop_flag; i++)
 			myusleep(500 * 1000);
 	}
+}
+
+void sip::wait_for_registered()
+{
+	std::unique_lock<std::mutex> lck(registered_lock);
+
+	while(!is_registered)
+		registered_cv.wait(lck);
+}
+
+std::pair<std::optional<std::string>, int> sip::initiate_call(const std::string & target, const std::string & local_address, const int timeout)
+{
+	wait_for_registered();
+
+	// use either upstream server or host of user, depending on if there's a fqdn in
+	// the 'target' specification
+	std::size_t at       = target.find('@');
+
+	std::string peer_host= upstream_server;
+
+	if (at != std::string::npos)
+		peer_host = target.substr(at + 1);
+
+	auto        a        = resolve_name(peer_host);
+
+	if (a.has_value() == false)
+		return { { }, 604 };  // could not resolve, returned as "does not exist anywhere"
+
+	struct sockaddr_in *const addr = reinterpret_cast<struct sockaddr_in *>(&a.value());
+
+	std::string call_id  = random_hex(16);
+
+	// store session record, to be filled by sip_input()
+	sip_session_t *ss  = allocate_sip_session();
+
+	ss->call_id        = call_id;
+
+	{
+		std::unique_lock<std::mutex> lck(sessions_lock);
+
+		sessions.insert({ call_id, ss });
+
+		sessions_pending.insert({ call_id, { -1, { } } });
+	}
+
+	// open a port for RTP
+	int         rtp_fd   = create_datagram_socket(0);
+
+	// would need to invoke 'connect' to find a local IP
+	// now assuming that 'myip' is useable
+	auto        local_a  = get_local_addr(rtp_fd);
+
+	// add SDP request
+	std::vector<std::string> sdp_records = generate_sdp_payload(myip, "IP4", local_a.second);
+
+	std::string sdp_data = merge(sdp_records, "\r\n");
+
+	int         CSeq     = 1;
+
+	std::string auth_hdr;
+
+	// might be changed by peer (a tag may be added)
+	std::string digest_to= "sip:" + target + "@" + peer_host;
+
+	std::string to       = "<" + digest_to + ">";
+
+resend_INVITE_request:
+	std::vector<std::string> headers_out;
+
+	headers_out.push_back(myformat("INVITE sip:%s SIP/2.0", target.c_str()));
+	headers_out.push_back("Max-Forwards: 127");
+	headers_out.push_back(myformat("CSeq: %d INVITE", CSeq++));
+	headers_out.push_back("To: " + to);
+	headers_out.push_back("From: <sip:" + local_address + "@" + upstream_server + ">;tag=" + tag);
+	headers_out.push_back("Contact: <sip:" + local_address + "@" + myaddr + ">");
+	headers_out.push_back("Call-ID: " + call_id);
+	headers_out.push_back("Via: SIP/2.0/UDP " + myaddr);
+	headers_out.push_back("User-Agent: libHappy");
+	headers_out.push_back("Expires: 1800");
+
+	if (auth_hdr.empty() == false)
+		headers_out.push_back(auth_hdr);
+
+	headers_out.push_back("Content-Type: application/sdp");
+	headers_out.push_back(myformat("Content-Length: %zu", sdp_data.size()));
+
+	std::string request  = merge(headers_out, "\r\n") + "\r\n" + sdp_data;
+
+	if (transmit_packet(addr, sip_fd, reinterpret_cast<const uint8_t *>(request.c_str()), request.size()) == false) {
+		DOLOG(info, "sip::reply_to_OPTIONS: transmit failed");
+
+		// TODO delete ss; and also from sessions-map
+
+		return { { }, 500 };
+	}
+
+	int      wait_result = -1;
+	std::vector<std::string> reply_headers;
+	std::vector<std::string> reply_body;
+
+	uint64_t wait_start  = get_ms();
+
+	std::unique_lock<std::mutex> lck(sessions_lock);
+
+	for(;;) {
+		auto pending_it = sessions_pending.find(call_id);
+
+		if (pending_it == sessions_pending.end()) {
+			// TODO delete ss; and also from sessions-map
+
+			return { { }, 500 };  // internal error: where did the record go?!
+		}
+
+		if (pending_it->second.first >= 200) {  // -1 is "not set" and 100...199 are "wait for peer"
+			wait_result   = pending_it->second.first;
+
+			if (pending_it->second.second.size() != 2) {
+				// TODO delete ss; and also from sessions-map
+
+				return { { }, 500 };  // internal error: where did the record go?!
+			}
+
+			reply_headers = split(pending_it->second.second[0], "\r\n");
+
+			reply_body    = split(pending_it->second.second[1], "\r\n");
+
+			if (pending_it->second.first == 401)  // requires a re-send so don't delete "pending" record
+				pending_it->second.first = -1;
+			else
+				sessions_pending.erase(call_id);
+
+			break;
+		}
+
+		int64_t wait_time = timeout * 1000 - (get_ms() - wait_start);
+
+		if (wait_time <= 0) {
+			sessions_pending.erase(call_id);
+
+			break;
+		}
+
+		sessions_cv.wait_for(lck, std::chrono::milliseconds(wait_time));
+	}
+
+	{
+		// acknowledge e.g. a 401
+		std::vector<std::string> headers_out;
+
+		headers_out.push_back(myformat("ACK sip:%s SIP/2.0", target.c_str()));
+
+		std::vector<std::string> copy_headers { "Via", "To", "From", "Max-Forwards", "Call-ID", "CSeq" };
+
+		for(auto header : copy_headers) {
+			auto str = find_header(&reply_headers, header);
+
+			if (str.has_value())
+				headers_out.push_back(header + ": " + str.value());
+		}
+
+		std::string request  = merge(headers_out, "\r\n");
+
+		if (transmit_packet(addr, sip_fd, reinterpret_cast<const uint8_t *>(request.c_str()), request.size()) == false) {
+			// TODO delete ss; and also from sessions-map
+
+			return { { }, 500 };
+		}
+	}
+
+	if (wait_result == 401) {
+		// TODO error checks
+		auto str_to = find_header(&reply_headers, "To");
+
+		auto lt     = str_to.value().find('<');
+		auto gt     = str_to.value().find('>', lt);
+
+		auto to_addr= str_to.value().substr(lt + 1, gt - lt - 1);
+
+	printf("digest_to: %s\n", digest_to.c_str());
+		auth_hdr    = generate_authorize_header(&reply_headers, digest_to, "INVITE");
+	printf("auth_hdr: %s\n", auth_hdr.c_str());
+
+		DOLOG(debug, "New auth header: %s\n", auth_hdr.c_str());
+
+		to          = str_to.value();
+
+		goto resend_INVITE_request;
+	}
+
+	auto sessions_it = sessions.find(call_id);
+
+	if (wait_result < 200) {
+		if (sessions_it != sessions.end())
+			delete sessions_it->second;
+
+		send_BYE(addr, sip_fd, headers_out);
+
+		return { { }, 504 };  // server time-out
+	}
+		
+	if (wait_result >= 300) {  // session did not start
+		if (sessions_it != sessions.end())
+			delete sessions_it->second;
+
+		return { { }, wait_result };
+	}
+
+	auto schema_addr = dissect_sdp(&reply_body, samplerate);
+
+	if (schema_addr.has_value() == false)
+		return { { }, 500 };
+
+	codec_t & schema = schema_addr.value().first;
+
+	ss->headers = reply_headers;
+	memcpy(&ss->sip_addr_peer, addr, sizeof ss->sip_addr_peer);
+	ss->fd             = rtp_fd;
+	ss->peer           = target;
+	ss->schema         = schema;
+	ss->audio_port     = local_a.second;
+
+	src_set_ratio(ss->audio_in_resample, double(samplerate) / schema.rate);  // TODO error checking
+
+	src_set_ratio(ss->audio_out_resample, schema.rate / double(samplerate));  // TODO error checking
+
+	// start receive thread
+	ss->th = new std::thread(&sip::session, this, schema_addr.value().second, ss);
+
+	return { call_id, wait_result };
 }

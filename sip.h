@@ -1,6 +1,7 @@
 // (C) 2020-2022 by folkert van heusden <mail@vanheusden.com>, released under Apache License v2.0
 #pragma once
 #include <atomic>
+#include <condition_variable>
 #include <functional>
 #include <map>
 #include <mutex>
@@ -56,8 +57,9 @@ typedef struct _sip_session_ {
 	G722_ENC_CTX      *g722_encoder  { nullptr };
 	G722_DEC_CTX      *g722_decoder  { nullptr };
 
-	// callback data
 	std::string        call_id;
+
+	std::string        peer;
 
 	// samplerate used by callbacks
 	int                samplerate  { 0 };
@@ -83,7 +85,8 @@ typedef struct _sip_session_ {
 		if (g722_decoder)
 			g722_decoder_destroy(g722_decoder);
 
-		close(fd);
+		if (fd != -1)
+			close(fd);
 	}
 } sip_session_t;
 
@@ -131,7 +134,16 @@ private:
 	std::thread *th3 { nullptr };
 
 	std::map<std::string, sip_session_t *> sessions;
-	std::mutex slock;
+	std::map<std::string, std::pair<int, std::vector<std::string> > > sessions_pending;
+	std::mutex                             sessions_lock;
+	std::condition_variable                sessions_cv;
+
+	std::mutex                             registered_lock;
+	std::string                            register_cid;
+	std::string                            register_authline;
+	std::string                            register_tag;
+	bool				       is_registered { false };
+	std::condition_variable                registered_cv;
 
 	uint64_t ddos_protection { 0 };
 
@@ -158,7 +170,15 @@ private:
 	void sip_input(const sockaddr_in *const a, const int fd, uint8_t *const payload, const size_t payload_size);
 	void sip_listener();
 
-	void session(const struct sockaddr_in tgt_addr, const int tgt_rtp_port, sip_session_t *const ss);
+	sip_session_t * allocate_sip_session();
+
+	std::vector<std::string> generate_sdp_payload(const std::string & ip, const std::string & proto, const int rtp_port);
+
+	std::string generate_authorize_header(const std::vector<std::string> *const headers, const std::string & uri, const std::string & method);
+
+	void session(const struct sockaddr_in tgt_addr, sip_session_t *const ss);
+
+	void wait_for_registered();
 
 	void session_cleaner();
 
@@ -176,6 +196,9 @@ public:
 		void *const global_private_data);
 
 	virtual ~sip();
+
+	// timeout is in seconds
+	std::pair<std::optional<std::string>, int> initiate_call(const std::string & target, const std::string & local_address, const int timeout);
 };
 
 void generate_beep(const double f, const double duration, const int samplerate, short **const beep, size_t *const beep_n);

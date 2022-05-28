@@ -23,7 +23,7 @@ cmake install
 
 ... will install the library and a .pc-file (for pkg-config).
 
-Note that if the libg722 library is empty, then invoke:
+Note that if the libg722 directory is empty, then invoke first (before running make):
 * cd libg722
 * git submodule init
 * git submodule update
@@ -75,6 +75,20 @@ The last 5 parameters are pointers to the callback functions:
 
 * void dtmf(const uint8\_t dtmf\_code, const bool is\_end, const uint8\_t volume, sip\_session\_t \*const session)
   Called when a DTMF code is received. This can come in multiple times, depending on how long someone keeps the button on the phone pressed.
+
+
+When the sip-class is instantiated with the parameters above then you can receive calls.
+
+When you invoke:
+
+    auto rc = initiate_call(const std::string & target, const std::string & local_address, const int timeout);
+
+e.g.:
+
+    auto rc = initiate_call("6501@somehost.com", "9997", 15);
+
+...then libHappy will make a call to 6501@somehost.com with "9997@upstream-sip-server" as your local endpoint.
+15 is the number of seconds it will wait for the other end to respond.
 
 
 The sip\_session\_t structure contains a few parameters relevant to the session.
