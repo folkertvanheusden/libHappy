@@ -1242,14 +1242,14 @@ std::pair<std::optional<std::string>, int> sip::initiate_call(const std::string 
 
 	// use either upstream server or host of user, depending on if there's a fqdn in
 	// the 'target' specification
-	std::size_t at       = target.find('@');
+	std::size_t at_tgt   = target.find('@');
 
 	std::string peer_host= upstream_server;
 
-	if (at != std::string::npos) {
-		peer_host = target.substr(at + 1);
+	if (at_tgt != std::string::npos) {
+		peer_host = target.substr(at_tgt + 1);
 
-		target    = target.substr(0, at);
+		target    = target.substr(0, at_tgt);
 	}
 
 	auto        a        = resolve_name(peer_host);
@@ -1258,6 +1258,7 @@ std::pair<std::optional<std::string>, int> sip::initiate_call(const std::string 
 		return { { }, 604 };  // could not resolve, returned as "does not exist anywhere"
 
 	struct sockaddr_in *const addr = reinterpret_cast<struct sockaddr_in *>(&a.value());
+	addr->sin_port = htons(5060);  // required later on for "create_datagram_socket_for"
 
 	std::string call_id  = random_hex(16);
 
@@ -1275,11 +1276,17 @@ std::pair<std::optional<std::string>, int> sip::initiate_call(const std::string 
 	}
 
 	// open a port for RTP
-	int         rtp_fd   = create_datagram_socket(0);
+	auto        rtp_tgt  = create_datagram_socket_for(0, *addr);
 
-	// would need to invoke 'connect' to find a local IP
-	// now assuming that 'myip' is useable
-	auto        local_a  = get_local_addr(rtp_fd);
+	if (rtp_tgt.has_value() == false) {
+		forget_session(ss);
+
+		return { { }, 500 };
+	}
+
+	int         rtp_fd   = rtp_tgt.value().first;
+
+	auto        local_a  = rtp_tgt.value().second;
 
 	// add SDP request
 	std::vector<std::string> sdp_records = generate_sdp_payload(myip, "IP4", local_a.second);
@@ -1290,20 +1297,26 @@ std::pair<std::optional<std::string>, int> sip::initiate_call(const std::string 
 
 	std::string auth_hdr;
 
-	// might be changed by peer (a tag may be added)
-	std::string uri      = "sip:" + target + "@" + peer_host;
+	std::string from_uri = "sip:" + local_address + "@" + upstream_server;
 
-	std::string to       = "<" + uri + ">";
+	std::size_t at_from  = local_address.find('@');
+
+	if (at_from != std::string::npos)
+		from_uri     = "sip" + local_address;
+
+	std::string to_uri   = "sip:" + target + "@" + peer_host;
+
+	std::string to       = "<" + to_uri + ">";
 
 resend_INVITE_request:
 	std::vector<std::string> headers_out;
 
-	headers_out.push_back(myformat("INVITE %s SIP/2.0", uri.c_str()));
+	headers_out.push_back(myformat("INVITE %s SIP/2.0", to_uri.c_str()));
 	headers_out.push_back("Max-Forwards: 127");
 	headers_out.push_back(myformat("CSeq: %d INVITE", CSeq++));
 	headers_out.push_back("To: " + to);
-	headers_out.push_back("From: <sip:" + local_address + "@" + upstream_server + ">;tag=" + tag);
-	headers_out.push_back("Contact: <sip:" + local_address + "@" + myaddr + ">");
+	headers_out.push_back("From: <" + from_uri + ">;tag=" + tag);
+	headers_out.push_back("Contact: <" + from_uri + ">");
 	headers_out.push_back("Call-ID: " + call_id);
 	headers_out.push_back("Via: SIP/2.0/UDP " + myaddr);
 	headers_out.push_back("User-Agent: libHappy");
@@ -1410,7 +1423,7 @@ resend_INVITE_request:
 				break;
 			}
 
-			auth_hdr    = generate_authorize_header(&reply_headers, uri, "INVITE");
+			auth_hdr    = generate_authorize_header(&reply_headers, to_uri, "INVITE");
 
 			DOLOG(debug, "New auth header: %s\n", auth_hdr.c_str());
 

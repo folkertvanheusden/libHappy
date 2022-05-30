@@ -5,6 +5,7 @@
 
 
 int         create_datagram_socket(const int port);
+std::optional<std::pair<int, std::pair<std::string, int> > > create_datagram_socket_for(const int local_port, const struct sockaddr_in & target_addr);
 
 std::string sockaddr_to_str(const struct sockaddr_in & a);
 

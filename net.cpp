@@ -91,6 +91,29 @@ std::optional<struct sockaddr_in> find_interface_for(const std::string & ip)
 	return *reinterpret_cast<struct sockaddr_in *>(&a);
 }
 
+std::optional<std::pair<int, std::pair<std::string, int> > > create_datagram_socket_for(const int local_port, const struct sockaddr_in & target_addr)
+{
+	int fd = socket(AF_INET, SOCK_DGRAM, 0);
+	if (fd == -1)
+		return { };
+
+	if (connect(fd, reinterpret_cast<const sockaddr *>(&target_addr), sizeof target_addr) == -1) {
+		close(fd);
+
+		return { };
+	}
+
+	auto local_addr = get_local_addr(fd);
+
+	if (local_addr.second == -1) {
+		close(fd);
+
+		return { };
+	}
+
+	return { { fd, local_addr } };
+}
+
 std::optional<struct sockaddr> resolve_name(const std::string & name, const int port)
 {
 	struct addrinfo hints { 0 };
