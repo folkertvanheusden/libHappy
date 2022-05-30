@@ -153,7 +153,7 @@ private:
 
 	void reply_to_INVITE(const sockaddr_in *const a, const int fd, const std::vector<std::string> *const headers, const std::vector<std::string> *const body);
 
-	void send_BYE(const sockaddr_in *const a, const int fd, const std::vector<std::string> & headers);
+	void send_BYE_or_CANCEL(const sockaddr_in *const a, const std::vector<std::string> & headers, const bool is_bye);
 	void reply_to_BYE(const sockaddr_in *const a, const int fd, const std::vector<std::string> *const headers);
 
 	bool transmit_audio(const sockaddr_in tgt_addr, sip_session_t *const ss, const short *const samples, const int n_samples, uint16_t *const seq_nr, uint32_t *const t, const uint32_t ssrc);

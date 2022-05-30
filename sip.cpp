@@ -810,9 +810,9 @@ static std::pair<uint8_t *, int> create_rtp_packet(const uint32_t ssrc, const ui
 	return { rtp_packet, size };
 }
 
-void sip::send_BYE(const sockaddr_in *const a, const int fd, const std::vector<std::string> & headers)
+void sip::send_BYE_or_CANCEL(const sockaddr_in *const a, const std::vector<std::string> & headers, const bool is_bye)
 {
-	std::string number = "0";
+	std::string extension = "0";
 
 	auto str_to = find_header(&headers, "To");
 	if (str_to.has_value()) {
@@ -820,16 +820,16 @@ void sip::send_BYE(const sockaddr_in *const a, const int fd, const std::vector<s
 		std::string::size_type gt = str_to.value().rfind('>');
 
 		if (lt != std::string::npos && gt != std::string::npos)
-			number = str_to.value().substr(lt + 1, gt - lt - 1);
+			extension = str_to.value().substr(lt + 1, gt - lt - 1);
 	}
 
 	std::vector<std::string> hout;
-	create_response_headers(myformat("BYE %s SIP/2.0", number.c_str()), &hout, true, &headers, 0, *a, myaddr);
+	create_response_headers(myformat("%s %s SIP/2.0", is_bye ? "BYE " : "CANCEL", extension.c_str()), &hout, true, &headers, 0, *a, myaddr);
 
 	std::string out = merge(hout, "\r\n") + "\r\n";
 
-	if (transmit_packet(a, fd, reinterpret_cast<const uint8_t *>(out.c_str()), out.size()) == false)
-		DOLOG(info, "sip::send_BYTE: transmit failed");
+	if (transmit_packet(a, sip_fd, reinterpret_cast<const uint8_t *>(out.c_str()), out.size()) == false)
+		DOLOG(info, "sip::send_BYE: transmit failed");
 }
 
 bool sip::transmit_audio(const sockaddr_in tgt_addr, sip_session_t *const ss, const short *const audio_in, const int n_audio_in, uint16_t *const seq_nr, uint32_t *const t, const uint32_t ssrc)
@@ -863,7 +863,7 @@ bool sip::transmit_audio(const sockaddr_in tgt_addr, sip_session_t *const ss, co
 
 		if (rtpp.second) {
 			if (transmit_packet(&tgt_addr, ss->fd, rtpp.first, rtpp.second) == false) {
-				DOLOG(info, "sip::send_BYTE: transmit failed");
+				DOLOG(info, "transmit_audio: transmit failed");
 
 				return false;
 			}
@@ -976,7 +976,7 @@ void sip::session(const struct sockaddr_in tgt_addr, sip_session_t *const ss)
 
 	ss->stop_flag = true;
 
-	send_BYE(&tgt_addr, ss->fd, ss->headers);
+	send_BYE_or_CANCEL(&tgt_addr, ss->headers, true);
 
 	send_REGISTER("", "");  // required?
 
@@ -1447,9 +1447,9 @@ resend_INVITE_request:
 	auto schema_addr = dissect_sdp(&reply_body, samplerate);
 
 	if (schema_addr.has_value() == false) {
-		forget_session(ss);
+		send_BYE_or_CANCEL(&ss->sip_addr_peer, ss->headers, false);
 
-		// TODO send CANCEL
+		forget_session(ss);
 
 		return { { }, 500 };
 	}
@@ -1465,9 +1465,9 @@ resend_INVITE_request:
 
 	if (src_set_ratio(ss->audio_in_resample, double(samplerate) / schema.rate) != 0 || 
 	    src_set_ratio(ss->audio_out_resample, schema.rate / double(samplerate)) != 0) {
-		forget_session(ss);
+		send_BYE_or_CANCEL(&ss->sip_addr_peer, ss->headers, false);
 
-		// TODO send CANCEL
+		forget_session(ss);
 
 		return { { }, 500 };
 	}
