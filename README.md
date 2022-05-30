@@ -85,9 +85,9 @@ When you invoke:
 
 e.g.:
 
-    auto rc = initiate_call("6501@somehost.com", "9997", 15);
+    auto rc = initiate_call("22222@vps001.vanheusden.com", "9997", 15);
 
-...then libHappy will make a call to 6501@somehost.com with "9997@upstream-sip-server" as your local endpoint.
+...then libHappy will make a call to 22222@vps001.vanheusden.com with "9997@upstream-sip-server" as your local endpoint.
 15 is the number of seconds it will wait for the other end to respond.
 
 

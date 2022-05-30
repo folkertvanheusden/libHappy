@@ -1234,9 +1234,11 @@ void sip::forget_session(sip_session_t *const ss)
 	delete ss;
 }
 
-std::pair<std::optional<std::string>, int> sip::initiate_call(const std::string & target, const std::string & local_address, const int timeout)
+std::pair<std::optional<std::string>, int> sip::initiate_call(const std::string & target_in, const std::string & local_address, const int timeout)
 {
 	wait_for_registered();
+
+	std::string target   = target_in;
 
 	// use either upstream server or host of user, depending on if there's a fqdn in
 	// the 'target' specification
@@ -1244,8 +1246,11 @@ std::pair<std::optional<std::string>, int> sip::initiate_call(const std::string 
 
 	std::string peer_host= upstream_server;
 
-	if (at != std::string::npos)
+	if (at != std::string::npos) {
 		peer_host = target.substr(at + 1);
+
+		target    = target.substr(0, at);
+	}
 
 	auto        a        = resolve_name(peer_host);
 
@@ -1286,14 +1291,14 @@ std::pair<std::optional<std::string>, int> sip::initiate_call(const std::string 
 	std::string auth_hdr;
 
 	// might be changed by peer (a tag may be added)
-	std::string digest_to= "sip:" + target + "@" + peer_host;
+	std::string uri      = "sip:" + target + "@" + peer_host;
 
-	std::string to       = "<" + digest_to + ">";
+	std::string to       = "<" + uri + ">";
 
 resend_INVITE_request:
 	std::vector<std::string> headers_out;
 
-	headers_out.push_back(myformat("INVITE sip:%s SIP/2.0", target.c_str()));
+	headers_out.push_back(myformat("INVITE %s SIP/2.0", uri.c_str()));
 	headers_out.push_back("Max-Forwards: 127");
 	headers_out.push_back(myformat("CSeq: %d INVITE", CSeq++));
 	headers_out.push_back("To: " + to);
@@ -1405,7 +1410,7 @@ resend_INVITE_request:
 				break;
 			}
 
-			auth_hdr    = generate_authorize_header(&reply_headers, digest_to, "INVITE");
+			auth_hdr    = generate_authorize_header(&reply_headers, uri, "INVITE");
 
 			DOLOG(debug, "New auth header: %s\n", auth_hdr.c_str());
 
