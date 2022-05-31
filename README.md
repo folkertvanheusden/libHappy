@@ -103,6 +103,7 @@ The only ones you should use are:
 
 This library has been tested with the Asterisk VOIP server application (SIP and the new PJSIP drivers).
 You may need to tell your VOIP server to use either ALAW, PCMA, ULAW, PCMU, G.722 or L16.
+When using PJSIP in Asterisk, set "auth\_type = md5" for the libhappy endpoint.
 
 
 written by Folkert van Heusden <mail@vanheusden.com> in 2022
