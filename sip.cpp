@@ -1379,9 +1379,9 @@ resend_INVITE_request:
 		int64_t wait_time = timeout * 1000 - (get_ms() - wait_start);
 
 		if (wait_time <= 0) {
-			sessions_pending.erase(call_id);
+			forget_session(ss);
 
-			break;
+			return { { }, 504 };  // server time-out
 		}
 
 		sessions_cv.wait_for(lck, std::chrono::milliseconds(wait_time));
