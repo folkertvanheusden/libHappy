@@ -1234,7 +1234,7 @@ void sip::forget_session(sip_session_t *const ss)
 	delete ss;
 }
 
-std::pair<std::optional<std::string>, int> sip::initiate_call(const std::string & target_in, const std::string & local_address, const int timeout)
+std::pair<std::optional<std::string>, int> sip::initiate_call(const std::string & target_in, const std::string & local_address, const int timeout, const bool direct)
 {
 	wait_for_registered();
 
@@ -1247,9 +1247,10 @@ std::pair<std::optional<std::string>, int> sip::initiate_call(const std::string 
 	std::string peer_host= upstream_server;
 
 	if (at_tgt != std::string::npos) {
-		peer_host = target.substr(at_tgt + 1);
+		if (direct)
+			peer_host = target.substr(at_tgt + 1);
 
-		target    = target.substr(0, at_tgt);
+		target = target.substr(0, at_tgt);
 	}
 
 	auto        a        = resolve_name(peer_host);

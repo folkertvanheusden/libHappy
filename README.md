@@ -85,10 +85,12 @@ When you invoke:
 
 e.g.:
 
-    auto rc = initiate_call("22222@vps001.vanheusden.com", "9997", 15);
+    auto rc = initiate_call("22222@vps001.vanheusden.com", "9997", 15, true);
 
 ...then libHappy will make a call to 22222@vps001.vanheusden.com with "9997@upstream-sip-server" as your local endpoint.
 15 is the number of seconds it will wait for the other end to respond.
+
+If 'direct' is true then the library will connect directly to the peer, not via the 'upstream\_sip\_server.
 
 
 The sip\_session\_t structure contains a few parameters relevant to the session.

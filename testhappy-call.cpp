@@ -70,7 +70,7 @@ int main(int argc, char *argv[])
 
 	// remote ip (IP address of upstream asterisk server), my extension-number, my password, my ip, my sip port, samplerate-used-by-callbacks, [callbacks...], pointer to global private data (or nullptr)
 	// note: 'my ip' is only required when the library cannot figure out what IP address to use to contact the SIP server. This can happen when there's a NAT router in between for example.
-	sip s("172.29.0.1", "9999", "1234", { }, 0, 60, 44100, cb_new_session, cb_recv, cb_send, cb_end_session, cb_dtmf, nullptr);
+	// sip s("172.29.0.113", "9999", "1234", { }, 0, 60, 44100, cb_new_session, cb_recv, cb_send, cb_end_session, cb_dtmf, nullptr);
 
 	// sip s("10.208.11.13", "3535", "1234", { }, 0, 60, 44100, cb_new_session, cb_recv, cb_send, cb_end_session, cb_dtmf, nullptr);
 
@@ -78,12 +78,17 @@ int main(int argc, char *argv[])
 
 	// sip s("192.168.122.115", "9999", "1234", { }, 0, 60, 44100, cb_new_session, cb_recv, cb_send, cb_end_session, cb_dtmf, nullptr);
 
-	// auto rc = s.initiate_call("4455", "3535", 15);
+	sip s("192.168.64.13", "9999", "1234", { }, 0, 60, 44100, cb_new_session, cb_recv, cb_send, cb_end_session, cb_dtmf, nullptr);
 
-	// auto rc = s.initiate_call("1000", "9997", 15);
-	//auto rc = s.initiate_call("22222@172.29.0.93", "9997", 15);
+	// auto rc = s.initiate_call("4455", "3535", 15, false);
 
-	auto rc = s.initiate_call("6501@192.168.64.1", "9999", 15);
+	// auto rc = s.initiate_call("1000", "9997", 15, false);
+	// auto rc = s.initiate_call("22222@172.29.0.93", "9997", 15, true);
+
+	// auto rc = s.initiate_call("22222@192.168.64.13", "9999", 15, false);
+	auto rc = s.initiate_call("22222@172.29.0.11", "9999", 15, false);
+
+	//auto rc = s.initiate_call("1212@192.168.64.13", "4107", 15, false);
 
 	printf("%d\n", rc.second);
 
