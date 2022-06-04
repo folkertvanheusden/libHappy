@@ -1321,7 +1321,7 @@ std::pair<std::optional<std::string>, int> sip::initiate_call(const std::string 
 	std::size_t at_from  = local_address.find('@');
 
 	if (at_from != std::string::npos)
-		from_uri     = "sip" + local_address;
+		from_uri     = "sip:" + local_address;
 
 	std::string to_uri   = "sip:" + target + "@" + peer_host;
 
