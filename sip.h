@@ -147,7 +147,7 @@ private:
 
 	uint64_t ddos_protection { 0 };
 
-	bool transmit_packet(const sockaddr_in *const a, const int fd, const uint8_t *const data, const size_t data_size);
+	bool transmit_packet(const sockaddr_in *const a, const int fd, const uint8_t *const data, const size_t data_size, const bool log);
 
 	void reply_to_OPTIONS(const sockaddr_in *const a, const int fd, const std::vector<std::string> *const headers);
 

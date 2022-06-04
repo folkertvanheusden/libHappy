@@ -342,8 +342,17 @@ static void create_response_headers(const std::string & request, std::vector<std
 	target->push_back(myformat("Content-Length: %zu", c_size));
 }
 
-bool sip::transmit_packet(const sockaddr_in *const a, const int fd, const uint8_t *const data, const size_t data_size)
+bool sip::transmit_packet(const sockaddr_in *const a, const int fd, const uint8_t *const data, const size_t data_size, const bool log)
 {
+	if (log) {
+		std::optional<std::string> dest_addr = get_host_as_text(const_cast<struct sockaddr *>(reinterpret_cast<const struct sockaddr *>(a)));
+
+		if (dest_addr.has_value())
+			DOLOG(debug, "[TO %s] %s", dest_addr.value().c_str(), reinterpret_cast<const char *>(data));
+		else
+			DOLOG(debug, "[TO ?] %s", reinterpret_cast<const char *>(data));
+	}
+
 	return sendto(fd, data, data_size, 0, reinterpret_cast<const struct sockaddr *>(a), sizeof *a) == ssize_t(data_size);
 }
 
@@ -381,7 +390,7 @@ void sip::reply_to_OPTIONS(const sockaddr_in *const a, const int fd, const std::
 
 	std::string out = headers_out + "\r\n" + content_out;
 
-	if (transmit_packet(a, fd, reinterpret_cast<const uint8_t *>(out.c_str()), out.size()) == false)
+	if (transmit_packet(a, fd, reinterpret_cast<const uint8_t *>(out.c_str()), out.size(), true) == false)
 		DOLOG(info, "sip::reply_to_OPTIONS: transmit failed");
 }
 
@@ -618,7 +627,7 @@ void sip::reply_to_INVITE(const sockaddr_in *const a, const int fd, const std::v
 				std::string out = headers_out + "\r\n" + content_out;
 
 				// send INVITE reply
-				if (transmit_packet(a, fd, reinterpret_cast<const uint8_t *>(out.c_str()), out.size()) == false) {
+				if (transmit_packet(a, fd, reinterpret_cast<const uint8_t *>(out.c_str()), out.size(), true) == false) {
 					DOLOG(info, "sip::reply_to_INVITE: ok transmit failed");
 
 					end_session_callback(ss);  // cannot transmit, session ended
@@ -645,7 +654,7 @@ void sip::reply_to_INVITE(const sockaddr_in *const a, const int fd, const std::v
 				std::string out = headers_out + "\r\n" + content_out;
 
 				// send rejection reply
-				if (transmit_packet(a, fd, reinterpret_cast<const uint8_t *>(out.c_str()), out.size()) == false)
+				if (transmit_packet(a, fd, reinterpret_cast<const uint8_t *>(out.c_str()), out.size(), true) == false)
 					DOLOG(info, "sip::reply_to_INVITE: rejection transmit failed");
 
 				delete ss;
@@ -661,7 +670,7 @@ void sip::send_ACK(const sockaddr_in *const a, const int fd, const std::vector<s
 
 	std::string out = merge(hout, "\r\n");
 
-	if (transmit_packet(a, fd, reinterpret_cast<const uint8_t *>(out.c_str()), out.size()) == false)
+	if (transmit_packet(a, fd, reinterpret_cast<const uint8_t *>(out.c_str()), out.size(), true) == false)
 		DOLOG(info, "sip::send_ACK: transmit failed");
 }
 
@@ -837,7 +846,7 @@ void sip::send_BYE_or_CANCEL(const sockaddr_in *const a, const std::vector<std::
 
 	std::string out = merge(hout, "\r\n") + "\r\n";
 
-	if (transmit_packet(a, sip_fd, reinterpret_cast<const uint8_t *>(out.c_str()), out.size()) == false)
+	if (transmit_packet(a, sip_fd, reinterpret_cast<const uint8_t *>(out.c_str()), out.size(), true) == false)
 		DOLOG(info, "sip::send_BYE: transmit failed");
 }
 
@@ -871,7 +880,7 @@ bool sip::transmit_audio(const sockaddr_in tgt_addr, sip_session_t *const ss, co
 		(*seq_nr)++;
 
 		if (rtpp.second) {
-			if (transmit_packet(&tgt_addr, ss->fd, rtpp.first, rtpp.second) == false) {
+			if (transmit_packet(&tgt_addr, ss->fd, rtpp.first, rtpp.second, false) == false) {
 				DOLOG(info, "transmit_audio: transmit failed");
 
 				return false;
@@ -1205,7 +1214,7 @@ bool sip::send_REGISTER(const std::string & call_id, const std::string & authori
         a.sin_port        = htons(tgt_port);
         a.sin_addr.s_addr = inet_addr(tgt_addr.c_str());
 
-	return transmit_packet(&a, sip_fd, reinterpret_cast<const uint8_t *>(out.c_str()), out.size());
+	return transmit_packet(&a, sip_fd, reinterpret_cast<const uint8_t *>(out.c_str()), out.size(), true);
 }
 
 // register at upstream server
@@ -1340,7 +1349,7 @@ resend_INVITE_request:
 
 	std::string request  = merge(headers_out, "\r\n") + "\r\n" + sdp_data;
 
-	if (transmit_packet(addr, sip_fd, reinterpret_cast<const uint8_t *>(request.c_str()), request.size()) == false) {
+	if (transmit_packet(addr, sip_fd, reinterpret_cast<const uint8_t *>(request.c_str()), request.size(), true) == false) {
 		DOLOG(info, "sip::reply_to_OPTIONS: transmit failed");
 
 		forget_session(ss);
@@ -1414,7 +1423,7 @@ resend_INVITE_request:
 
 		std::string request  = merge(headers_out, "\r\n");
 
-		if (transmit_packet(addr, sip_fd, reinterpret_cast<const uint8_t *>(request.c_str()), request.size()) == false) {
+		if (transmit_packet(addr, sip_fd, reinterpret_cast<const uint8_t *>(request.c_str()), request.size(), true) == false) {
 			forget_session(ss);
 
 			return { { }, 500 };
