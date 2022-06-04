@@ -14,3 +14,5 @@ std::pair<std::string, int>       get_local_addr(const int fd);
 std::optional<struct sockaddr_in> find_interface_for(const std::string & ip);
 
 std::optional<struct sockaddr>    resolve_name(const std::string & name, const int port = 5060);
+
+std::optional<std::string>        get_host_as_text(struct sockaddr *const a);

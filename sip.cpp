@@ -188,7 +188,12 @@ void sip::sip_listener()
 			ssize_t recv_rc = recvfrom(sip_fd, buffer, sizeof buffer - 1, 0, reinterpret_cast<struct sockaddr *>(&addr), &addr_len);
 
 			if (recv_rc > 0) {
-				DOLOG(debug, "%s", buffer);
+				std::optional<std::string> source_addr = get_host_as_text(reinterpret_cast<struct sockaddr *>(&addr));
+
+				if (source_addr.has_value())
+					DOLOG(debug, "[FROM %s] %s", source_addr.value().c_str(), buffer);
+				else
+					DOLOG(debug, "[FROM ?] %s", buffer);
 
 				sip_input(&addr, sip_fd, buffer, recv_rc);
 			}
@@ -220,6 +225,8 @@ void sip::sip_input(const sockaddr_in *const a, const int fd, uint8_t *const pay
 		reply_to_INVITE(a, fd, &header_lines, &body_lines);
 	}
 	else if (parts.size() == 3 && parts.at(0) == "BYE" && parts.at(2) == "SIP/2.0") {
+		DOLOG(debug, "Received BYE\n");
+
 		reply_to_BYE(a, fd, &header_lines);
 	}
 	else if (parts.size() >= 2 && parts.at(0) == "SIP/2.0") {
@@ -337,8 +344,6 @@ static void create_response_headers(const std::string & request, std::vector<std
 
 bool sip::transmit_packet(const sockaddr_in *const a, const int fd, const uint8_t *const data, const size_t data_size)
 {
-	DOLOG(debug, "%s", std::string(reinterpret_cast<const char *>(data), data_size).c_str());
-
 	return sendto(fd, data, data_size, 0, reinterpret_cast<const struct sockaddr *>(a), sizeof *a) == ssize_t(data_size);
 }
 
@@ -675,10 +680,14 @@ void sip::reply_to_BYE(const sockaddr_in *const a, const int fd, const std::vect
 
 		auto it = sessions.find(call_id.value());
 
-		if (it != sessions.end())
+		if (it != sessions.end()) {
+			DOLOG(info, "sip::reply_to_BYE: asking thread for session \"%s\" to terminate\n", call_id.value().c_str());
+
 			it->second->stop_flag = true;
-		else
+		}
+		else {
 			DOLOG(warning, "sip::reply_to_BYE: session \"%s\" not found\n", call_id.value().c_str());
+		}
 	}
 
 	send_ACK(a, fd, headers);
