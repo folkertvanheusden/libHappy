@@ -23,6 +23,8 @@ extern "C" {
 }
 
 
+typedef enum { call_direct, call_indirect } call_via_t;
+
 typedef struct {
 	uint8_t     id;
 
@@ -201,7 +203,7 @@ public:
 
 	// timeout is in seconds
 	// if 'direct' is true then the library will connect directly to the peer, not via the 'upstream_sip_server
-	std::pair<std::optional<std::string>, int> initiate_call(const std::string & target, const std::string & local_address, const int timeout, const bool direct);
+	std::pair<std::optional<std::string>, int> initiate_call(const std::string & target, const std::string & local_address, const int timeout, const call_via_t via);
 };
 
 void generate_beep(const double f, const double duration, const int samplerate, short **const beep, size_t *const beep_n);
