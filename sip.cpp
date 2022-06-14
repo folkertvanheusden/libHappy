@@ -138,7 +138,7 @@ sip::sip(const std::string & upstream_sip_server, const std::string & upstream_s
 
 		DOLOG(debug, "Local port number: %d\n", this->myport);
 	}
-	else if (sip_fd == 1) {
+	else if (sip_fd == -1) {
 		error_exit(true, "Selected port for SIP (UDP %d) is not available", myport);
 	}
 
