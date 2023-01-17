@@ -367,7 +367,7 @@ std::vector<std::string> sip::generate_sdp_payload(const std::string & ip, const
 	payload.push_back("t=0 0");
 	payload.push_back(myformat("m=audio %u RTP/AVP 0 8 9 11", rtp_port));
 	payload.push_back("a=sendrecv");
-	payload.push_back(myformat("a=rtpmap:0 PCMU/%u", samplerate));
+//	payload.push_back(myformat("a=rtpmap:0 PCMU/%u", samplerate));
 	payload.push_back(myformat("a=rtpmap:8 PCMA/%u", samplerate));
 	payload.push_back(myformat("a=rtpmap:9 G722/8000"));
 	payload.push_back(myformat("a=rtpmap:11 L16/%u", samplerate));
@@ -474,7 +474,6 @@ std::optional<std::pair<codec_t, struct sockaddr_in> > dissect_sdp(const std::ve
 		std::string name = str_tolower(it->second.first);
 
 		if (name == "pcma" || name == "alaw" ||
-		    name == "pcmu" || name == "ulaw" ||
 		    name == "l16"  ||
 		    name == "g722") {
 			best.id       = order_id;
@@ -780,7 +779,7 @@ static std::pair<uint8_t *, int> create_rtp_packet(const uint32_t ssrc, const ui
 {
 	int sample_size = 0;
 
-	if (schema.name == "alaw" || schema.name == "pcma" || schema.name == "ulaw" || schema.name == "pcmu")  // a-law and mu-law
+	if (schema.name == "alaw" || schema.name == "pcma")  // a-law and mu-law
 		sample_size = sizeof(uint8_t);
 	else if (schema.name == "g722")	// G722
 		sample_size = sizeof(uint8_t);
@@ -810,10 +809,6 @@ static std::pair<uint8_t *, int> create_rtp_packet(const uint32_t ssrc, const ui
 	if (schema.name == "alaw" || schema.name == "pcma") {	// a-law
 		for(int i=0; i<n_samples; i++)
 			rtp_packet[12 + i] = encode_alaw(samples[i]);
-	}
-	else if (schema.name == "ulaw" || schema.name == "pcmu") {	// mu-law
-		for(int i=0; i<n_samples; i++)
-			rtp_packet[12 + i] = encode_mulaw(samples[i]);
 	}
 	else if (schema.name == "g722") {  // g.722
 		g722_encode(g722_enc, samples, n_samples, &rtp_packet[12]);
@@ -1062,7 +1057,7 @@ bool sip::audio_input(const uint8_t *const payload, const size_t payload_size, s
 
 	ss->latest_pkt = get_us();
 
-	if (ss->schema.name == "alaw" || ss->schema.name == "pcma" || ss->schema.name == "ulaw" || ss->schema.name == "pcmu") {  // a-law and mu-law
+	if (ss->schema.name == "alaw" || ss->schema.name == "pcma") {  // a-law and mu-law
 		int n_samples = payload_size - 12;
 
 		if (n_samples > 0) {
@@ -1071,10 +1066,6 @@ bool sip::audio_input(const uint8_t *const payload, const size_t payload_size, s
 			if (ss->schema.name == "alaw" || ss->schema.name == "pcma") {
 				for(int i=0; i<n_samples; i++)
 					temp[i] = decode_alaw(payload[12 + i]);
-			}
-			else if (ss->schema.name == "ulaw" || ss->schema.name == "pcmu") {
-				for(int i=0; i<n_samples; i++)
-					temp[i] = decode_mulaw(payload[12 + i]);
 			}
 
 			short *result   = nullptr;
