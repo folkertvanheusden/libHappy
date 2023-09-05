@@ -180,10 +180,10 @@ void sip::sip_listener()
 			break;
 
 		if (rc == 1) {
-			uint8_t     buffer[9999] { 0 };  // room for (most) jumbo frame-sizes
+			uint8_t     buffer[65536] { 0 };
 
-			sockaddr_in addr         { 0 };
-			socklen_t   addr_len     { sizeof addr };
+			sockaddr_in addr          { 0 };
+			socklen_t   addr_len      { sizeof addr };
 
 			ssize_t recv_rc = recvfrom(sip_fd, buffer, sizeof buffer - 1, 0, reinterpret_cast<struct sockaddr *>(&addr), &addr_len);
 
