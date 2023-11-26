@@ -1,4 +1,5 @@
-// (C) 2020-2022 by folkert van heusden <mail@vanheusden.com>, released under Apache License v2.0
+// (C) 2020-2023 by folkert van heusden <mail@vanheusden.com>, CC0 license
+
 #include <cstring>
 #include <math.h>
 #include <optional>

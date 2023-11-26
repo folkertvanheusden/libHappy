@@ -1,4 +1,5 @@
-// (C) 2020-2023 by folkert van heusden <mail@vanheusden.com>, released under Apache License v2.0
+// (C) 2020-2023 by folkert van heusden <mail@vanheusden.com>, CC0 license
+
 #include <algorithm>
 #include <assert.h>
 #include <errno.h>
@@ -15,12 +16,14 @@
 #include <sys/stat.h>
 #include <sys/time.h>
 #include <sys/types.h>
+
 #if __GLIBC__ == 2 && __GLIBC_MINOR__ < 30
 #include <sys/syscall.h>
 #define gettid() pid_t(syscall(SYS_gettid))
 #endif
 
 #include "utils.h"
+
 
 // replace by std::format when c++20 is more common
 std::string myformat(const char *const fmt, ...)

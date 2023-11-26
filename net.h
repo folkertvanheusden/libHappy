@@ -1,4 +1,5 @@
-// (C) 2021-2023 by folkert van heusden <mail@vanheusden.com>, released under Apache License v2.0
+// (C) 2021-2023 by folkert van heusden <mail@vanheusden.com>, CC0 license
+
 #include <optional>
 #include <string>
 #include <sys/socket.h>

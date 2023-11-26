@@ -108,10 +108,6 @@ You may need to tell your VOIP server to use either ALAW, PCMA, ULAW, PCMU, G.72
 When using PJSIP in Asterisk, set "auth\_type = md5" for the libhappy endpoint.
 
 
-written by Folkert van Heusden <mail@vanheusden.com> in 2022
+written by Folkert van Heusden <mail@vanheusden.com> in 2022-2023
 
-released under apache license v2
-
-<a href="https://scan.coverity.com/projects/folkertvanheusden-libhappy"><img alt="Coverity Scan Build Status" src="https://scan.coverity.com/projects/25018/badge.svg"/></a>
-
-[![Language grade: C/C++](https://img.shields.io/lgtm/grade/cpp/g/folkertvanheusden/libHappy.svg?logo=lgtm&logoWidth=18)](https://lgtm.com/projects/g/folkertvanheusden/libHappy/context:cpp)
+CC0 license
