@@ -25,8 +25,8 @@
 // replace by std::format when c++20 is more common
 std::string myformat(const char *const fmt, ...)
 {
-        char *buffer = nullptr;
-        va_list ap;
+        char    *buffer = nullptr;
+        va_list  ap;
 
         va_start(ap, fmt);
         (void)vasprintf(&buffer, fmt, ap);
@@ -40,7 +40,7 @@ std::string myformat(const char *const fmt, ...)
 
 uint64_t get_us()
 {
-	struct timespec ts { 0, 0 };
+	timespec ts { 0, 0 };
 
 	if (clock_gettime(CLOCK_REALTIME, &ts) == -1)
 		error_exit(true, "clock_gettime failed");
@@ -50,7 +50,7 @@ uint64_t get_us()
 
 uint64_t get_ms()
 {
-	struct timespec ts { 0, 0 };
+	timespec ts { 0, 0 };
 
 	if (clock_gettime(CLOCK_REALTIME, &ts) == -1)
 		error_exit(true, "clock_gettime failed");
@@ -169,7 +169,7 @@ void dolog(const log_level_t ll, const char *fmt, ...)
 	uint64_t now = get_us();
 	time_t t_now = now / 1000000;
 
-	struct tm tm { 0 };
+	tm     tm { 0 };
 	if (!localtime_r(&t_now, &tm))
 		error_exit(true, "localtime_r failed");
 
@@ -210,13 +210,13 @@ void set_thread_name(std::string name)
 
 void myusleep(uint64_t us)
 {
-	struct timespec req { 0 };
+	timespec req { 0 };
 
-	req.tv_sec = us / 1000000l;
+	req.tv_sec  = us / 1000000l;
 	req.tv_nsec = (us % 1000000l) * 1000l;
 
 	for(;;) {
-		struct timespec rem { 0, 0 };
+		timespec rem { 0, 0 };
 
 		int rc = nanosleep(&req, &rem);
 		if (rc == 0 || (rc == -1 && errno != EINTR)) {
@@ -226,7 +226,7 @@ void myusleep(uint64_t us)
 			break;
 		}
 
-		memcpy(&req, &rem, sizeof(struct timespec));
+		memcpy(&req, &rem, sizeof(timespec));
 	}
 }
 
@@ -287,11 +287,11 @@ std::string replace(std::string target, const std::string & what, const std::str
 
 void error_exit(const bool se, const char *format, ...)
 {
-	int e = errno;
+	int     e  = errno;
 	va_list ap;
 
 	va_start(ap, format);
-	char *temp = NULL;
+	char *temp = nullptr;
 	if (vasprintf(&temp, format, ap) == -1)
 		puts(format);  // last resort
 	va_end(ap);
