@@ -884,7 +884,7 @@ bool sip::transmit_audio(const sockaddr_in tgt_addr, sip_session_t *const ss, co
 			delete [] rtpp.first;
 		}
 
-		double sleep = 1000000.0 / (ss->schema.rate / double(cur_n / 8.0));
+		double sleep = 1000000.0 / (ss->schema.rate / double(cur_n / 4.0));
 		myusleep(sleep);
 	}
 
