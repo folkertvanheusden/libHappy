@@ -642,7 +642,7 @@ void sip::reply_to_INVITE(const sockaddr_in *const a, const int fd, const std::v
 			else {
 				// merge headers
 				std::vector<std::string> hout;
-				create_response_headers("SIP/2.0 608 Rejected", &hout, false, headers, content_out.size(), ss->sip_addr_peer, myaddr);
+				create_response_headers("SIP/2.0 603 Rejected", &hout, false, headers, content_out.size(), ss->sip_addr_peer, myaddr);
 
 				std::string headers_out = merge(hout, "\r\n");
 
