@@ -420,10 +420,13 @@ std::optional<std::pair<codec_t, struct sockaddr_in> > dissect_sdp(const std::ve
 			continue;
 		}
 
-		if (line.substr(0, 2) == "o=") {
+		if (line.substr(0, 2) == "c=") {
 			auto parts = split(line, " ");
-			if (parts.size() >= 6)
-				rtp_target_host = parts[5];
+			if (parts.size() >= 3) {
+				rtp_target_host = parts[2];
+				if (auto slash = rtp_target_host.find("/"); slash != std::string::npos)
+					rtp_target_host = rtp_target_host.substr(0, slash);
+			}
 			continue;
 		}
 
