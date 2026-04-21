@@ -949,7 +949,7 @@ void generate_beep(const double f, const double duration, const int samplerate, 
 	double mul = 2.0 * M_PI * f;
 
 	for(size_t i=0; i<*beep_n; i++)
-		(*beep)[i] = 32767 * sin(mul * (i + i / double(samplerate)));
+		(*beep)[i] = 32767 * sin(mul * i / double(samplerate));
 }
 
 void sip::session(const struct sockaddr_in tgt_addr, sip_session_t *const ss)
