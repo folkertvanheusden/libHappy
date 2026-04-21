@@ -412,7 +412,7 @@ std::optional<std::pair<codec_t, struct sockaddr_in> > dissect_sdp(const std::ve
 	std::map<int, std::pair<std::string, int> > options;
 
 	for(auto & line : *body) {
-		DOLOG(debug, "SPD: %s\n", line.c_str());
+		DOLOG(debug, "SDP: %s\n", line.c_str());
 
 		if (line.substr(0, 11) == "a=maxptime:") {
 			frame_duration = std::min(40, atoi(line.substr(11).c_str()));
