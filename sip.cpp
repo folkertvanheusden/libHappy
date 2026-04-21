@@ -415,17 +415,14 @@ std::optional<std::pair<codec_t, struct sockaddr_in> > dissect_sdp(const std::ve
 
 		if (line.substr(0, 11) == "a=maxptime:") {
 			frame_duration = std::min(40, atoi(line.substr(11).c_str()));
-
 			DOLOG(debug, "dissect_sdp: frame duration set to %dms\n", frame_duration);
-
 			continue;
 		}
 
 		if (line.substr(0, 2) == "o=") {
 			auto parts = split(line, " ");
-
-			rtp_target_host = parts[5];
-
+			if (parts.size() >= 6)
+				rtp_target_host = parts[5];
 			continue;
 		}
 
@@ -436,7 +433,6 @@ std::optional<std::pair<codec_t, struct sockaddr_in> > dissect_sdp(const std::ve
 
 			// "m=audio 19206 RTP/AVP" are not of interest
 			order.erase(order.begin(), order.begin() + 3);
-
 			continue;
 		}
 
