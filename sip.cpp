@@ -1057,12 +1057,9 @@ bool sip::audio_input(const uint8_t *const payload, const size_t payload_size, s
 		int n_samples = payload_size - 12;
 
 		if (n_samples > 0) {
-			short *temp = new short[n_samples]();
-
-			if (ss->schema.name == "alaw" || ss->schema.name == "pcma") {
-				for(int i=0; i<n_samples; i++)
-					temp[i] = decode_alaw(payload[12 + i]);
-			}
+			short *temp = new short[n_samples];
+			for(int i=0; i<n_samples; i++)
+				temp[i] = decode_alaw(payload[12 + i]);
 
 			short *result   = nullptr;
 			int    result_n = 0;
