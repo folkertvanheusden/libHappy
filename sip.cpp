@@ -572,21 +572,18 @@ void sip::reply_to_INVITE(const sockaddr_in *const a, const int fd, const std::v
 			auto call_id       = find_header(headers, "Call-ID");
 			if (call_id.has_value() == false) {
 				DOLOG(info, "Call-ID header missing\n");
-
 				return;
 			}
 
 			auto from          = find_header(headers, "From");
 			if (from.has_value() == false) {
 				DOLOG(info, "From header missing\n");
-
 				return;
 			}
 
 			int  rtp_fd        = create_datagram_socket(0);
 			if (rtp_fd == -1) {
 				DOLOG(info, "Cannot allocate RTP (UDP) port\n");
-
 				return;
 			}
 
@@ -597,6 +594,8 @@ void sip::reply_to_INVITE(const sockaddr_in *const a, const int fd, const std::v
 				from_value = from_value.substr(0, semi_colon);
 
 			sip_session_t *ss  = allocate_sip_session();
+			if (!ss)
+				return;
 
 			ss->headers        = *headers;
 			memcpy(&ss->sip_addr_peer, a, sizeof ss->sip_addr_peer);
@@ -1237,6 +1236,9 @@ void sip::forget_session(sip_session_t *const ss)
 {
 	std::unique_lock<std::mutex> lck(sessions_lock);
 
+	if (ss->fd != -1)
+		close(ss->fd);
+
 	sessions.erase(ss->call_id);
 
 	sessions_pending.erase(ss->call_id);
@@ -1291,11 +1293,11 @@ std::pair<std::optional<std::string>, int> sip::initiate_call(const std::string 
 
 	if (rtp_tgt.has_value() == false) {
 		forget_session(ss);
-
 		return { { }, 500 };
 	}
 
 	int         rtp_fd   = rtp_tgt.value().first;
+	ss->fd               = rtp_fd;
 
 	auto        local_a  = rtp_tgt.value().second;
 
@@ -1482,7 +1484,6 @@ resend_INVITE_request:
 
 	ss->headers = reply_headers;
 	memcpy(&ss->sip_addr_peer, addr, sizeof ss->sip_addr_peer);
-	ss->fd             = rtp_fd;
 	ss->peer           = target;
 	ss->schema         = schema;
 	ss->audio_port     = local_a.second;
