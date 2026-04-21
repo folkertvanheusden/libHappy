@@ -1200,12 +1200,15 @@ bool sip::send_REGISTER(const std::string & call_id, const std::string & authori
 	out += "Content-Length: 0\r\n";
 	out += "Max-Forwards: 70\r\n\r\n";
 
-	struct sockaddr_in a { 0 };
-        a.sin_family      = PF_INET;
-        a.sin_port        = htons(tgt_port);
-        a.sin_addr.s_addr = inet_addr(tgt_addr.c_str());
+	auto addr = resolve_name(tgt_addr.c_str(), tgt_port);
+	if (addr.has_value() == false) {
+		DOLOG(info, "sip::send_REGISTER: resolve of \"%s\" failed", tgt_addr.c_str());
+		return false;
+	}
 
-	return transmit_packet(&a, sip_fd, reinterpret_cast<const uint8_t *>(out.c_str()), out.size(), true);
+	sockaddr_in *a = reinterpret_cast<sockaddr_in *>(&addr.value());
+
+	return transmit_packet(a, sip_fd, reinterpret_cast<const uint8_t *>(out.c_str()), out.size(), true);
 }
 
 // register at upstream server
