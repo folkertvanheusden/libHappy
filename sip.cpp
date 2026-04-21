@@ -181,13 +181,12 @@ void sip::sip_listener()
 			break;
 
 		if (rc == 1) {
-			uint8_t     buffer[65536] { 0 };
+			uint8_t    *buffer = new uint8_t[65536]();
 
 			sockaddr_in addr          { 0 };
 			socklen_t   addr_len      { sizeof addr };
 
 			ssize_t recv_rc = recvfrom(sip_fd, buffer, sizeof buffer - 1, 0, reinterpret_cast<struct sockaddr *>(&addr), &addr_len);
-
 			if (recv_rc > 0) {
 				std::optional<std::string> source_addr = get_host_as_text(reinterpret_cast<struct sockaddr *>(&addr));
 
@@ -198,6 +197,8 @@ void sip::sip_listener()
 
 				sip_input(&addr, sip_fd, buffer, recv_rc);
 			}
+
+			delete [] buffer;
 		}
 	}
 }
@@ -1362,7 +1363,6 @@ resend_INVITE_request:
 
 	for(;;) {
 		auto pending_it = sessions_pending.find(call_id);
-
 		if (pending_it == sessions_pending.end()) {
 			forget_session(ss);
 
