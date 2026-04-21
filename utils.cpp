@@ -148,8 +148,10 @@ void setloguid(const int uid, const int gid)
 
 void closelog()
 {
-	fclose(lfh);
-	lfh = nullptr;
+	if (lfh) {
+		fclose(lfh);
+		lfh = nullptr;
+	}
 }
 
 void dolog(const log_level_t ll, const char *fmt, ...)
