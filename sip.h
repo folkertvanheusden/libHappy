@@ -181,7 +181,8 @@ private:
 
 	void session(const struct sockaddr_in tgt_addr, sip_session_t *const ss);
 
-	void wait_for_registered();
+	// in seconds
+	bool wait_for_registered(const int timeout);
 
 	void session_cleaner();
 

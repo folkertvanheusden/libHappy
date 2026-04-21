@@ -1223,12 +1223,16 @@ void sip::register_thread()
 	}
 }
 
-void sip::wait_for_registered()
+bool sip::wait_for_registered(const int timeout)
 {
 	std::unique_lock<std::mutex> lck(registered_lock);
+	// a spurious wake-up resets the timeout wait
+	while(!is_registered) {
+		if (registered_cv.wait_for(lck, std::chrono::seconds(timeout)) == std::cv_status::timeout)
+			return false;
+	}
 
-	while(!is_registered)
-		registered_cv.wait(lck);
+	return true;
 }
 
 void sip::forget_session(sip_session_t *const ss)
@@ -1247,7 +1251,8 @@ void sip::forget_session(sip_session_t *const ss)
 
 std::pair<std::optional<std::string>, int> sip::initiate_call(const std::string & target_in, const std::string & local_address, const int timeout, const call_via_t via)
 {
-	wait_for_registered();
+	if (wait_for_registered(timeout) == false)
+		return { "Timeout while waiting for REGISTER", 0 };
 
 	std::string target   = target_in;
 
