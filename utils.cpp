@@ -123,16 +123,12 @@ std::vector<std::string> split(std::string in, std::string splitter)
 static const char *logfile          = strdup("/tmp/myip.log");
 log_level_t        log_level_file   = warning;
 log_level_t        log_level_screen = warning;
-static FILE       *lfh              = nullptr;
 static int         lf_uid           = -1;
 static int         lf_gid           = -1;
 
 void setlog(const char *lf, const log_level_t ll_file, const log_level_t ll_screen)
 {
-	if (lfh)
-		fclose(lfh);
-
-	free((void *)logfile);
+	free(const_cast<void *>(reinterpret_cast<const void *>(logfile)));
 
 	logfile = strdup(lf);
 
@@ -148,10 +144,6 @@ void setloguid(const int uid, const int gid)
 
 void closelog()
 {
-	if (lfh) {
-		fclose(lfh);
-		lfh = nullptr;
-	}
 }
 
 void dolog(const log_level_t ll, const char *fmt, ...)
@@ -159,17 +151,15 @@ void dolog(const log_level_t ll, const char *fmt, ...)
 	if (ll < log_level_file && ll < log_level_screen)
 		return;
 
-	if (!lfh) {
-		lfh = fopen(logfile, "a+");
-		if (!lfh)
-			error_exit(true, "Cannot access log-file %s", logfile);
+	FILE *lfh = fopen(logfile, "a+");
+	if (!lfh)
+		error_exit(true, "Cannot access log-file %s", logfile);
 
-		if (lf_uid != -1 && fchown(fileno(lfh), lf_uid, lf_gid) == -1)
-			error_exit(true, "Cannot change logfile (%s) ownership", logfile);
+	if (lf_uid != -1 && fchown(fileno(lfh), lf_uid, lf_gid) == -1)
+		error_exit(true, "Cannot change logfile (%s) ownership", logfile);
 
-		if (fcntl(fileno(lfh), F_SETFD, FD_CLOEXEC) == -1)
-			error_exit(true, "fcntl(FD_CLOEXEC) failed");
-	}
+	if (fcntl(fileno(lfh), F_SETFD, FD_CLOEXEC) == -1)
+		error_exit(true, "fcntl(FD_CLOEXEC) failed");
 
 	uint64_t now = get_us();
 	time_t t_now = now / 1000000;
@@ -195,6 +185,8 @@ void dolog(const log_level_t ll, const char *fmt, ...)
 
 	if (ll >= log_level_file)
 		fprintf(lfh, "%s%s", ts_str, str);
+
+	fclose(lfh);
 
 	if (ll >= log_level_screen)
 		printf("%s%s", ts_str, str);
